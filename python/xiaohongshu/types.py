@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -85,7 +85,7 @@ class Comment(BaseModel):
     liked: bool = False
     userInfo: User = Field(default_factory=User)
     subCommentCount: str = "0"
-    subComments: list["Comment"] = Field(default_factory=list)
+    subComments: list[Comment] = Field(default_factory=list)
     showTags: list[str] = Field(default_factory=list)
 
 
@@ -93,7 +93,7 @@ Comment.model_rebuild()
 
 
 class CommentList(BaseModel):
-    list: list[Comment] = Field(default_factory=list)
+    list: List[Comment] = Field(default_factory=list)
     cursor: str = ""
     hasMore: bool = False
 

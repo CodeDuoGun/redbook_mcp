@@ -107,5 +107,6 @@ class SearchAction:
         raw_list: list[dict] = json.loads(result)
         feeds = [Feed.model_validate(item) for item in raw_list]
         logger.info(f"search '{keyword}' got {len(feeds)} feeds")
+        logger.info(f"feed : {type(feeds[-1])} {feeds[-1]}")
         return feeds
 
