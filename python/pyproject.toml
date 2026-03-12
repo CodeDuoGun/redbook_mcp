@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xiaohongshu-mcp"
+version = "2.0.0"
+description = "小红书 MCP 服务 - Python 版本"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "playwright>=1.44.0",
+    "pydantic>=2.0.0",
+    "loguru>=0.7.0",
+    "anyio>=4.0.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.135.1",
+]
+
+[project.scripts]
+xiaohongshu-mcp = "main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["xiaohongshu", "main.py", "service.py", "browser.py", "cookies.py", "mcp_server.py"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
