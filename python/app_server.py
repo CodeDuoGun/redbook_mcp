@@ -413,7 +413,7 @@ class AppServer:
             feed_id, xsec_token, load_all_comments, config
         )
         import json, dataclasses
-        text = json.dumps(dataclasses.asdict(result.data), ensure_ascii=False, indent=2)
+        text = json.dumps(serialize(result.data), ensure_ascii=False, indent=2)
         return {"content": [{"type": "text", "text": text}], "is_error": False}
 
     async def handle_post_comment(self, ctx, args_map):

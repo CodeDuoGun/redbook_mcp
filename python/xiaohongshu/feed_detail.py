@@ -399,10 +399,11 @@ class FeedDetailAction:
             raise ValueError(f"feed detail not found in __INITIAL_STATE__ for {feed_id}")
 
         note_detail_map: dict = json.loads(result)
+        with open("result.json", "w") as f:
+            f.write(json.dumps(json.loads(result), ensure_ascii=False, indent=2))
         detail = note_detail_map.get(feed_id)
         if detail is None:
             raise ValueError(f"feed {feed_id} not found in noteDetailMap")
-
         return FeedDetailResponse(
             note=FeedDetail.model_validate(detail.get("note", {})),
             comments=CommentList.model_validate(detail.get("comments", {})),
