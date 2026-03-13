@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>小红书 MCP 控制台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="shell">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-icon">✦</span>
+        <span class="brand-name">小红书 MCP</span>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-panel="login">
+          <span class="nav-icon">◉</span>
+          <span>账号登录</span>
+        </button>
+        <button class="nav-item" data-panel="analyze">
+          <span class="nav-icon">◈</span>
+          <span>爆款分析</span>
+        </button>
+        <button class="nav-item" data-panel="publish">
+          <span class="nav-icon">◆</span>
+          <span>内容发布</span>
+        </button>
+        <button class="nav-item" data-panel="search">
+          <span class="nav-icon">◎</span>
+          <span>搜索内容</span>
+        </button>
+        <button class="nav-item" data-panel="image">
+          <span class="nav-icon">◧</span>
+          <span>图片分析</span>
+        </button>
+        <button class="nav-item" data-panel="collect">
+          <span class="nav-icon">◫</span>
+          <span>用户采集</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="status-dot" id="globalStatus"></div>
+        <span id="globalStatusText">未连接</span>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+
+      <!-- ===== LOGIN PANEL ===== -->
+      <section class="panel active" id="panel-login">
+        <div class="panel-header">
+          <h1 class="panel-title">账号登录</h1>
+          <p class="panel-sub">管理小红书账号登录状态</p>
+        </div>
+        <div class="card-grid">
+          <div class="card">
+            <div class="card-label">登录状态</div>
+            <div class="login-status-block">
+              <div class="status-badge" id="loginBadge">检测中...</div>
+              <div class="login-info" id="loginInfo">—</div>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" onclick="checkLogin()">检查状态</button>
+              <button class="btn btn-ghost" onclick="deleteCookies()">清除登录</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-label">扫码登录</div>
+            <div class="qr-container" id="qrContainer">
+              <div class="qr-placeholder" id="qrPlaceholder">
+                <span class="qr-hint">点击获取二维码</span>
+              </div>
+              <img id="qrImage" class="qr-image hidden" alt="登录二维码" />
+              <div id="qrStatus" class="qr-status hidden"></div>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" onclick="getQrcode()">获取二维码</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== ANALYZE PANEL ===== -->
+      <section class="panel" id="panel-analyze">
+        <div class="panel-header">
+          <h1 class="panel-title">AI 爆款笔记分析</h1>
+          <p class="panel-sub">搜索笔记并深度分析爆款要素</p>
+        </div>
+        <div class="card">
+          <div class="card-label">搜索笔记</div>
+          <div class="form-row">
+            <input class="input" id="analyzeKeyword" placeholder="输入关键词，例如：减脂早餐" />
+            <button class="btn btn-primary" onclick="analyzeSearch()">搜索</button>
+          </div>
+        </div>
+        <div id="analyzeResults" class="feed-grid hidden"></div>
+        <div class="card hidden" id="analyzeDetailCard">
+          <div class="card-label">笔记详情 &amp; AI 分析</div>
+          <div id="analyzeDetail"></div>
+          <div id="aiAnalysis" class="ai-block hidden"></div>
+          <div class="btn-row">
+            <button class="btn btn-accent" onclick="runAiAnalysis()">✦ AI 爆款分析</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== PUBLISH PANEL ===== -->
+      <section class="panel" id="panel-publish">
+        <div class="panel-header">
+          <h1 class="panel-title">内容发布</h1>
+          <p class="panel-sub">发布图文笔记或视频到小红书</p>
+        </div>
+        <div class="tab-bar">
+          <button class="tab active" data-tab="img">图文发布</button>
+          <button class="tab" data-tab="video">视频发布</button>
+        </div>
+
+        <!-- 图文 -->
+        <div class="tab-content active" id="tab-img">
+          <div class="card">
+            <div class="form-group">
+              <label class="form-label">标题 <span class="hint">最多20字</span></label>
+              <input class="input" id="pubTitle" placeholder="吸引眼球的标题..." maxlength="20" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">正文</label>
+              <textarea class="textarea" id="pubContent" placeholder="分享你的生活..." rows="5"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">图片 <span class="hint">每行一个本地路径或URL，最多9张</span></label>
+              <textarea class="textarea" id="pubImages" placeholder="/path/to/image.jpg&#10;https://example.com/img.png" rows="4"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">标签 <span class="hint">逗号分隔</span></label>
+              <input class="input" id="pubTags" placeholder="减脂,早餐,健康" />
+            </div>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label class="form-label">可见性</label>
+                <select class="input" id="pubVisibility">
+                  <option value="">默认公开</option>
+                  <option value="public">公开</option>
+                  <option value="private">仅自己</option>
+                  <option value="friends">朋友可见</option>
+                </select>
+              </div>
+              <div class="form-group flex-1">
+                <label class="form-label">定时发布</label>
+                <input class="input" id="pubSchedule" type="datetime-local" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="check-label">
+                <input type="checkbox" id="pubOriginal" />
+                <span>标记为原创</span>
+              </label>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" onclick="publishContent()">发布图文</button>
+            </div>
+            <div id="pubResult" class="result-block hidden"></div>
+          </div>
+        </div>
+
+        <!-- 视频 -->
+        <div class="tab-content" id="tab-video">
+          <div class="card">
+            <div class="form-group">
+              <label class="form-label">标题 <span class="hint">最多20字</span></label>
+              <input class="input" id="vidTitle" placeholder="视频标题..." maxlength="20" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">正文</label>
+              <textarea class="textarea" id="vidContent" placeholder="视频描述..." rows="4"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">视频文件路径</label>
+              <input class="input" id="vidPath" placeholder="/path/to/video.mp4" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">标签 <span class="hint">逗号分隔</span></label>
+              <input class="input" id="vidTags" placeholder="vlog,日常" />
+            </div>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label class="form-label">可见性</label>
+                <select class="input" id="vidVisibility">
+                  <option value="">默认公开</option>
+                  <option value="public">公开</option>
+                  <option value="private">仅自己</option>
+                </select>
+              </div>
+              <div class="form-group flex-1">
+                <label class="form-label">定时发布</label>
+                <input class="input" id="vidSchedule" type="datetime-local" />
+              </div>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn-primary" onclick="publishVideo()">发布视频</button>
+            </div>
+            <div id="vidResult" class="result-block hidden"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SEARCH PANEL ===== -->
+      <section class="panel" id="panel-search">
+        <div class="panel-header">
+          <h1 class="panel-title">搜索内容</h1>
+          <p class="panel-sub">搜索小红书笔记，支持多维度过滤</p>
+        </div>
+        <div class="card">
+          <div class="form-row">
+            <input class="input" id="searchKeyword" placeholder="关键词..." />
+            <button class="btn btn-primary" onclick="searchFeeds()">搜索</button>
+          </div>
+          <div class="filter-row">
+            <select class="input input-sm" id="filterSort">
+              <option value="">默认排序</option>
+              <option value="hot">热度</option>
+              <option value="new">最新</option>
+            </select>
+            <select class="input input-sm" id="filterType">
+              <option value="">全部类型</option>
+              <option value="video">视频</option>
+              <option value="note">图文</option>
+            </select>
+            <select class="input input-sm" id="filterTime">
+              <option value="">不限时间</option>
+              <option value="1d">一天内</option>
+              <option value="1w">一周内</option>
+              <option value="1m">一月内</option>
+              <option value="6m">半年内</option>
+            </select>
+          </div>
+        </div>
+        <div id="searchResults" class="feed-grid hidden"></div>
+      </section>
+
+      <!-- ===== IMAGE ANALYSIS PANEL ===== -->
+      <section class="panel" id="panel-image">
+        <div class="panel-header">
+          <h1 class="panel-title">图片分析</h1>
+          <p class="panel-sub">输入笔记 ID 或图片 URL，获取 AI 视觉分析</p>
+        </div>
+        <div class="card">
+          <div class="form-group">
+            <label class="form-label">图片 URL</label>
+            <div class="form-row">
+              <input class="input" id="imgUrl" placeholder="https://..." />
+              <button class="btn btn-ghost" onclick="previewImage()">预览</button>
+            </div>
+          </div>
+          <div id="imgPreview" class="img-preview hidden"></div>
+          <div class="form-group">
+            <label class="form-label">笔记 ID（可选，自动提取图片）</label>
+            <div class="form-row">
+              <input class="input" id="imgFeedId" placeholder="feedId" />
+              <input class="input" id="imgXsecToken" placeholder="xsec_token" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">分析指令</label>
+            <textarea class="textarea" id="imgPrompt" rows="3" placeholder="请分析这张图片的构图、色调、文字内容，以及为何能成为小红书爆款..."></textarea>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="analyzeImage()">✦ 分析图片</button>
+          </div>
+          <div id="imgResult" class="ai-block hidden"></div>
+        </div>
+      </section>
+
+      <!-- ===== COLLECT PANEL ===== -->
+      <section class="panel" id="panel-collect">
+        <div class="panel-header">
+          <h1 class="panel-title">爆款评论用户采集</h1>
+          <p class="panel-sub">抓取笔记评论区，采集活跃用户数据</p>
+        </div>
+        <div class="card">
+          <div class="form-group">
+            <label class="form-label">笔记 ID</label>
+            <input class="input" id="collectFeedId" placeholder="feedId" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">xsec_token</label>
+            <input class="input" id="collectXsecToken" placeholder="xsec_token" />
+          </div>
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label class="form-label">采集数量</label>
+              <input class="input" id="collectLimit" type="number" value="20" min="5" max="200" />
+            </div>
+            <div class="form-group flex-1">
+              <label class="form-label">加载回复</label>
+              <select class="input" id="collectReplies">
+                <option value="false">不加载</option>
+                <option value="true">加载回复</option>
+              </select>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="collectUsers()">开始采集</button>
+            <button class="btn btn-ghost hidden" id="exportBtn" onclick="exportUsers()">导出 CSV</button>
+          </div>
+          <div id="collectProgress" class="progress-block hidden">
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            <div class="progress-text" id="progressText">采集中...</div>
+          </div>
+        </div>
+        <div id="collectResults" class="hidden">
+          <div class="card">
+            <div class="card-label">采集结果 <span id="collectCount" class="badge"></span></div>
+            <div class="table-wrap">
+              <table class="data-table" id="usersTable">
+                <thead>
+                  <tr>
+                    <th>用户名</th>
+                    <th>用户ID</th>
+                    <th>评论内容</th>
+                    <th>点赞数</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody id="usersTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
