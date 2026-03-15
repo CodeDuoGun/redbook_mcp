@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import signal
 import logging
+import traceback
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -103,6 +104,7 @@ class AppServer:
                 "检查登录状态成功",
             )
         except Exception as e:
+            logger.error(f"检查登录状态失败")
             return _error(500, "STATUS_CHECK_FAILED", "检查登录状态失败", str(e))
 
     async def get_login_qrcode_handler(self):
@@ -117,6 +119,7 @@ class AppServer:
                 "获取登录二维码成功",
             )
         except Exception as e:
+            logger.error(f"获取登录二维码失败: {traceback.format_exc()}")
             return _error(500, "STATUS_CHECK_FAILED", "获取登录二维码失败", str(e))
 
     async def delete_cookies_handler(self):
@@ -131,12 +134,14 @@ class AppServer:
                 "删除 cookies 成功",
             )
         except Exception as e:
+            logger.error(f"删除 cookies 失败: {traceback.format_exc()}")
             return _error(500, "DELETE_COOKIES_FAILED", "删除 cookies 失败", str(e))
 
     async def publish_handler(self, request: Request):
         try:
             body = await request.json()
         except Exception:
+            logger.error(f"请求参数错误: {traceback.format_exc()}")
             return _error(400, "INVALID_REQUEST", "请求参数错误", "invalid JSON body")
 
         try:
@@ -162,12 +167,14 @@ class AppServer:
                 "发布成功",
             )
         except Exception as e:
+            logger.error(f"发布失败: {traceback.format_exc()}")
             return _error(500, "PUBLISH_FAILED", "发布失败", str(e))
 
     async def publish_video_handler(self, request: Request):
         try:
             body = await request.json()
         except Exception:
+            logger.error(f"请求参数错误: {traceback.format_exc()}")
             return _error(400, "INVALID_REQUEST", "请求参数错误", "invalid JSON body")
 
         try:
@@ -192,6 +199,7 @@ class AppServer:
                 "视频发布成功",
             )
         except Exception as e:
+            logger.error(f"视频发布失败: {traceback.format_exc()}")
             return _error(500, "PUBLISH_VIDEO_FAILED", "视频发布失败", str(e))
 
     async def list_feeds_handler(self):
@@ -199,10 +207,11 @@ class AppServer:
             result = await self.xiaohongshu_service.list_feeds()
             import dataclasses
             return _success(
-                {"feeds": [dataclasses.asdict(f) for f in result.feeds], "count": result.count},
+                {"feeds": [serialize(f) for f in result.feeds], "count": result.count},
                 "获取Feeds列表成功",
             )
         except Exception as e:
+            logger.error(f"获取Feeds列表失败: {traceback.format_exc()}")
             return _error(500, "LIST_FEEDS_FAILED", "获取Feeds列表失败", str(e))
 
     async def search_feeds_handler(self, request: Request):
@@ -231,10 +240,11 @@ class AppServer:
             result = await self.xiaohongshu_service.search_feeds(keyword, filters)
             import dataclasses
             return _success(
-                {"feeds": [dataclasses.asdict(f) for f in result.feeds], "count": result.count},
+                {"feeds": [serialize(f) for f in result.feeds], "count": result.count},
                 "搜索Feeds成功",
             )
         except Exception as e:
+            logger.error(f"搜索Feeds失败: {traceback.format_exc()}")
             return _error(500, "SEARCH_FEEDS_FAILED", "搜索Feeds失败", str(e))
 
     async def get_feed_detail_handler(self, request: Request):
@@ -263,10 +273,11 @@ class AppServer:
             )
             import dataclasses
             return _success(
-                {"feed_id": result.feed_id, "data": dataclasses.asdict(result.data)},
+                {"feed_id": result.feed_id, "data": serialize(result.data)},
                 "获取Feed详情成功",
             )
         except Exception as e:
+            logger.error(f"获取Feed详情失败: {traceback.format_exc()}")
             return _error(500, "GET_FEED_DETAIL_FAILED", "获取Feed详情失败", str(e))
 
     async def user_profile_handler(self, request: Request):
@@ -280,7 +291,7 @@ class AppServer:
             xsec_token = body.get("xsec_token", "")
             result = await self.xiaohongshu_service.user_profile(user_id, xsec_token)
             import dataclasses
-            return _success({"data": dataclasses.asdict(result)}, "获取用户主页成功")
+            return _success({"data": serialize(result)}, "获取用户主页成功")
         except Exception as e:
             return _error(500, "GET_USER_PROFILE_FAILED", "获取用户主页失败", str(e))
 
@@ -296,7 +307,7 @@ class AppServer:
             content = body.get("content", "")
             result = await self.xiaohongshu_service.post_comment_to_feed(feed_id, xsec_token, content)
             import dataclasses
-            return _success(dataclasses.asdict(result), result.message)
+            return _success(serialize(result), result.message)
         except Exception as e:
             return _error(500, "POST_COMMENT_FAILED", "发表评论失败", str(e))
 
@@ -316,8 +327,9 @@ class AppServer:
                 feed_id, xsec_token, comment_id, user_id, content
             )
             import dataclasses
-            return _success(dataclasses.asdict(result), result.message)
+            return _success(serialize(result), result.message)
         except Exception as e:
+            logger.error(f"回复评论失败: {traceback.format_exc()}")
             return _error(500, "REPLY_COMMENT_FAILED", "回复评论失败", str(e))
 
     async def my_profile_handler(self):
@@ -328,6 +340,7 @@ class AppServer:
                 "获取我的主页成功",
             )
         except Exception as e:
+            logger.error(f"获取我的主页失败: {traceback.format_exc()}")
             return _error(500, "GET_MY_PROFILE_FAILED", "获取我的主页失败", str(e))
 
     # -------------------------

@@ -76,7 +76,6 @@
               <div class="qr-placeholder" id="qrPlaceholder">
                 <span class="qr-hint">点击获取二维码</span>
               </div>
-              <img id="qrImage" class="qr-image hidden" alt="登录二维码" />
               <div id="qrStatus" class="qr-status hidden"></div>
             </div>
             <div class="btn-row">
@@ -90,24 +89,27 @@
       <section class="panel" id="panel-analyze">
         <div class="panel-header">
           <h1 class="panel-title">AI 爆款笔记分析</h1>
-          <p class="panel-sub">搜索笔记并深度分析爆款要素</p>
+          <p class="panel-sub">输入笔记地址，解析内容并生成新的创作方案</p>
         </div>
+
+        <!-- URL input card -->
         <div class="card">
-          <div class="card-label">搜索笔记</div>
-          <div class="form-row">
-            <input class="input" id="analyzeKeyword" placeholder="输入关键词，例如：减脂早餐" />
-            <button class="btn btn-primary" onclick="analyzeSearch()">搜索</button>
+          <div class="card-label">笔记地址 <span class="hint">支持一个或多个，每行一个</span></div>
+          <textarea class="textarea" id="analyzeUrls" rows="4"
+            placeholder="https://www.xiaohongshu.com/explore/abc123?xsec_token=xxx&#10;https://www.xiaohongshu.com/explore/def456?xsec_token=yyy"></textarea>
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn btn-primary" onclick="analyzeFromUrls(event)">✦ 开始分析</button>
           </div>
         </div>
-        <div id="analyzeResults" class="feed-grid hidden"></div>
-        <div class="card hidden" id="analyzeDetailCard">
-          <div class="card-label">笔记详情 &amp; AI 分析</div>
-          <div id="analyzeDetail"></div>
-          <div id="aiAnalysis" class="ai-block hidden"></div>
-          <div class="btn-row">
-            <button class="btn btn-accent" onclick="runAiAnalysis()">✦ AI 爆款分析</button>
-          </div>
+
+        <!-- Progress indicator -->
+        <div class="card hidden" id="analyzeProgress">
+          <div class="progress-bar"><div class="progress-fill" id="analyzeFill"></div></div>
+          <div class="progress-text" id="analyzeProgressText">正在解析...</div>
         </div>
+
+        <!-- Results list -->
+        <div id="analyzeResultsList"></div>
       </section>
 
       <!-- ===== PUBLISH PANEL ===== -->
@@ -339,6 +341,14 @@
 
   <!-- Toast -->
   <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Feed Detail Modal -->
+  <div class="modal-overlay hidden" id="feedModal" onclick="closeFeedModal(event)">
+    <div class="modal-box" id="feedModalBox">
+      <button class="modal-close" onclick="closeFeedModal()">✕</button>
+      <div id="feedModalContent"><div class="skeleton" style="height:200px;margin-bottom:16px"></div><div class="skeleton" style="height:20px;margin-bottom:10px"></div><div class="skeleton" style="height:14px;width:60%"></div></div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
