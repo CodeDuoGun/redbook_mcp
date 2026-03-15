@@ -86,7 +86,7 @@ async function updateGlobalStatus() {
     document.getElementById('globalStatusText').textContent = '未连接';
   }
 }
-setInterval(updateGlobalStatus, 8000);
+setInterval(updateGlobalStatus, 40000);
 updateGlobalStatus();
 
 /* ============================================================
@@ -380,6 +380,152 @@ function adoptAnalysis(idx) {
   toast('内容已填入发布页面，请确认后发布', 'success');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+/* ============================================================
+   LOCAL FILE UPLOAD HELPERS
+   ============================================================ */
+
+// Upload a file to backend and get back its absolute server-side path
+async function uploadFileToServer(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch(API_BASE + '/upload/file', {
+    method: 'POST',
+    body: formData,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+  return json.data?.path || '';
+}
+
+// Images: upload to server to get absolute path, show thumbnails
+async function handlePubImgUpload(input) {
+  const files = Array.from(input.files).slice(0, 9);
+  if (!files.length) return;
+
+  const previews = document.getElementById('pubImgPreviews');
+  const textarea = document.getElementById('pubImages');
+  const zone     = document.getElementById('pubImgUploadZone');
+
+  for (const file of files) {
+    const objUrl = URL.createObjectURL(file);
+    // Add thumb with loading state
+    const wrap = document.createElement('div');
+    wrap.className = 'upload-thumb';
+    const safeId = 'pub-path-' + Date.now() + Math.random().toString(36).slice(2);
+    wrap.innerHTML = `
+      <img src="${objUrl}" />
+      <input class="upload-path-input" id="${safeId}" value="上传中..." disabled placeholder="绝对路径" />
+      <button class="upload-thumb-remove" onclick="removePubImg(this)">✕</button>
+    `;
+    previews.appendChild(wrap);
+    const pathInput = wrap.querySelector('.upload-path-input');
+
+    try {
+      const absPath = await uploadFileToServer(file);
+      pathInput.value = absPath;
+      pathInput.disabled = false;
+      pathInput.style.borderColor = 'var(--green)';
+    } catch (e) {
+      // Fallback: show filename, let user edit
+      pathInput.value = file.name;
+      pathInput.disabled = false;
+      pathInput.style.borderColor = 'var(--gold)';
+      pathInput.title = '上传失败，请手动填写绝对路径';
+      toast(`图片上传失败: ${e.message}`, 'error');
+    }
+
+    // Sync path input > textarea on manual edit
+    pathInput.addEventListener('input', () => syncPubImgPaths());
+    syncPubImgPaths();
+  }
+
+  zone.classList.add('upload-zone-filled');
+  input.value = '';
+}
+
+function syncPubImgPaths() {
+  const previews = document.getElementById('pubImgPreviews');
+  const textarea = document.getElementById('pubImages');
+  const paths = Array.from(previews.querySelectorAll('.upload-path-input'))
+    .map(el => el.value.trim()).filter(v => v && v !== '上传中...');
+  textarea.value = paths.join('\n');
+}
+
+function removePubImg(btn) {
+  btn.closest('.upload-thumb').remove();
+  syncPubImgPaths();
+  if (!document.querySelectorAll('#pubImgPreviews .upload-thumb').length) {
+    document.getElementById('pubImgUploadZone').classList.remove('upload-zone-filled');
+  }
+}
+
+// Video: upload to server to get absolute path
+async function handleVidUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const preview   = document.getElementById('vidPreview');
+  const pathInput = document.getElementById('vidPath');
+  const zone      = document.getElementById('vidUploadZone');
+
+  const objUrl = URL.createObjectURL(file);
+  preview.innerHTML = `
+    <div class="upload-thumb upload-thumb-video">
+      <video src="${objUrl}" controls style="max-width:100%;max-height:140px;border-radius:6px"></video>
+      <span class="upload-thumb-name">${escHtml(file.name)}</span>
+      <button class="upload-thumb-remove" onclick="removeVid()">✕</button>
+    </div>
+  `;
+
+  pathInput.value = '上传中...';
+  pathInput.disabled = true;
+  zone.classList.add('upload-zone-filled');
+  input.value = '';
+
+  try {
+    const absPath = await uploadFileToServer(file);
+    pathInput.value = absPath;
+    pathInput.style.borderColor = 'var(--green)';
+  } catch (e) {
+    pathInput.value = file.name;
+    pathInput.style.borderColor = 'var(--gold)';
+    pathInput.title = '上传失败，请手动填写绝对路径';
+    toast(`视频上传失败: ${e.message}`, 'error');
+  } finally {
+    pathInput.disabled = false;
+  }
+}
+
+function removeVid() {
+  document.getElementById('vidPreview').innerHTML = '';
+  document.getElementById('vidPath').value = '';
+  document.getElementById('vidUploadZone').classList.remove('upload-zone-filled');
+}
+
+// Drag-and-drop support for both zones
+function setupUploadZoneDnd(zoneId, inputId) {
+  const zone = document.getElementById(zoneId);
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('upload-zone-drag'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('upload-zone-drag'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('upload-zone-drag');
+    const input = document.getElementById(inputId);
+    // Create a synthetic FileList-like trigger
+    const dt = e.dataTransfer;
+    if (!dt.files.length) return;
+    // Assign and dispatch change
+    Object.defineProperty(input, 'files', { value: dt.files, configurable: true });
+    input.dispatchEvent(new Event('change'));
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  setupUploadZoneDnd('pubImgUploadZone', 'pubImgFile');
+  setupUploadZoneDnd('vidUploadZone', 'vidFile');
+});
 
 /* ============================================================
    PUBLISH PANEL
@@ -944,6 +1090,313 @@ function escHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/* ============================================================
+   FEEDS LIST PANEL
+   ============================================================ */
+async function loadFeedsList() {
+  const loadBtn    = document.getElementById('feedsLoadBtn');
+  const refreshBtn = document.getElementById('feedsRefreshBtn');
+  const progress   = document.getElementById('feedsProgress');
+  const fill       = document.getElementById('feedsProgressFill');
+  const progText   = document.getElementById('feedsProgressText');
+  const grid       = document.getElementById('feedsGrid');
+  const stats      = document.getElementById('feedsStats');
+  const countEl    = document.getElementById('feedsCount');
+
+  setLoading(loadBtn, true);
+  progress.classList.remove('hidden');
+  grid.classList.add('hidden');
+  stats.classList.add('hidden');
+  fill.style.width = '20%';
+  progText.textContent = '正在获取首页推荐...';
+
+  try {
+    fill.style.width = '60%';
+    const res   = await apiFetch('/feeds/list');
+    const feeds = res.data?.feeds || [];
+
+    fill.style.width = '100%';
+    progText.textContent = `加载完成，共 ${feeds.length} 篇`;
+    setTimeout(() => progress.classList.add('hidden'), 800);
+
+    countEl.textContent = feeds.length;
+    stats.classList.remove('hidden');
+
+    if (!feeds.length) {
+      grid.innerHTML = '<p style="color:var(--text-muted);padding:20px">暂无推荐内容，请确认已登录</p>';
+    } else {
+      grid.innerHTML = feeds.map((f, i) => renderFeedCard(f, i, null)).join('');
+    }
+    grid.classList.remove('hidden');
+
+    loadBtn.classList.add('hidden');
+    refreshBtn.classList.remove('hidden');
+    toast(`获取到 ${feeds.length} 篇推荐笔记`, 'success');
+  } catch (e) {
+    fill.style.background = 'var(--accent)';
+    progText.textContent = '加载失败：' + e.message;
+    toast('获取推荐列表失败：' + e.message, 'error');
+  } finally {
+    setLoading(loadBtn, false);
+  }
+}
+
+// Track local image paths for AI analysis
+let _aiLocalImages = [];
+
+async function handleAiImgUpload(input) {
+  const remaining = 4 - _aiLocalImages.length;
+  const files = Array.from(input.files).slice(0, remaining);
+  if (!files.length) return;
+
+  const previews = document.getElementById('aiImgUploadPreviews');
+  const zone     = document.getElementById('aiImgUploadZone');
+
+  for (const file of files) {
+    const objUrl = URL.createObjectURL(file);
+    const idx = _aiLocalImages.length;
+    _aiLocalImages.push(''); // placeholder
+
+    const wrap = document.createElement('div');
+    wrap.className = 'upload-thumb';
+    wrap.innerHTML = `
+      <img src="${objUrl}" />
+      <span class="upload-thumb-name">${escHtml(file.name)}</span>
+      <span class="upload-thumb-name" style="color:var(--gold)">上传中...</span>
+      <button class="upload-thumb-remove" onclick="removeAiImg(this, ${idx})">✕</button>
+    `;
+    previews.appendChild(wrap);
+
+    try {
+      const absPath = await uploadFileToServer(file);
+      _aiLocalImages[idx] = absPath;
+      // Update status text
+      const statusSpan = wrap.querySelectorAll('.upload-thumb-name')[1];
+      if (statusSpan) {
+        statusSpan.textContent = absPath.split('/').pop();
+        statusSpan.style.color = 'var(--green)';
+        statusSpan.title = absPath;
+      }
+    } catch (e) {
+      // Fallback to base64
+      const reader = new FileReader();
+      reader.onload = ev => {
+        _aiLocalImages[idx] = ev.target.result;
+        const statusSpan = wrap.querySelectorAll('.upload-thumb-name')[1];
+        if (statusSpan) { statusSpan.textContent = '(base64)'; statusSpan.style.color = 'var(--text-muted)'; }
+      };
+      reader.readAsDataURL(file);
+      toast(`图片上传失败，使用 base64: ${e.message}`, 'info');
+    }
+
+    if (_aiLocalImages.length >= 4) zone.style.opacity = '0.4';
+  }
+
+  zone.classList.add('upload-zone-filled');
+  input.value = '';
+}
+
+function removeAiImg(btn, idx) {
+  _aiLocalImages.splice(idx, 1);
+  btn.closest('.upload-thumb').remove();
+  // Re-index remove buttons
+  document.querySelectorAll('#aiImgUploadPreviews .upload-thumb-remove').forEach((b, i) => {
+    b.setAttribute('onclick', `removeAiImg(this, ${i})`);
+  });
+  const zone = document.getElementById('aiImgUploadZone');
+  if (_aiLocalImages.length < 4) zone.style.opacity = '';
+  if (!_aiLocalImages.length) zone.classList.remove('upload-zone-filled');
+}
+
+// Wire up drag-and-drop for AI image zone after DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  setupUploadZoneDnd('aiImgUploadZone', 'aiImgFile');
+});
+
+/* ============================================================
+   AI ANALYZE PANEL
+   ============================================================ */
+
+// simple debounce helper
+function debounce(fn, ms = 400) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+// store last AI result for adopt
+let _lastAiResult = null;
+
+// Tab switching for ai input modes
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.ai-input-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.ai-input-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.ai-mode-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('aiMode-' + tab.dataset.mode)?.classList.add('active');
+    });
+  });
+
+  // Preview images as user types URLs
+  document.getElementById('aiImages')?.addEventListener('input', debounce(() => {
+    const urls = document.getElementById('aiImages').value
+      .split('\n').map(s => s.trim()).filter(Boolean);
+    const row = document.getElementById('aiImgPreviewRow');
+    if (!row) return;
+    row.innerHTML = urls.slice(0, 4).map(u =>
+      `<img src="${escHtml(u)}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" onerror="this.style.opacity=0.3" loading="lazy" />`
+    ).join('');
+  }, 600));
+});
+
+function aiSetStep(stepId, state /* 'active'|'done'|'error' */) {
+  const el = document.getElementById(stepId);
+  if (!el) return;
+  el.className = 'ai-step ' + state;
+}
+
+async function runAiAnalyze() {
+  const btn = document.getElementById('aiAnalyzeBtn');
+  const activeTab = document.querySelector('.ai-input-tab.active')?.dataset.mode || 'url';
+
+  // Collect inputs
+  const url    = document.getElementById('aiUrl')?.value.trim() || '';
+  const title  = document.getElementById('aiTextTitle')?.value.trim() || '';
+  const text   = document.getElementById('aiTextContent')?.value.trim() || '';
+  const imgRaw = document.getElementById('aiImages')?.value.trim() || '';
+  const urlImages = imgRaw ? imgRaw.split('\n').map(s => s.trim()).filter(Boolean) : [];
+  // Merge: local uploads (base64) + URL images
+  const images = [..._aiLocalImages, ...urlImages];
+  const topic  = document.getElementById('aiTopic')?.value.trim() || '';
+
+  // Validate
+  if (activeTab === 'url' && !url)   { toast('请输入笔记链接', 'error'); return; }
+  if (activeTab === 'text' && !text) { toast('请输入参考正文', 'error'); return; }
+  if (activeTab === 'image' && !images.length) { toast('请上传图片或输入图片链接', 'error'); return; }
+
+  setLoading(btn, true);
+  _lastAiResult = null;
+
+  // Show progress
+  const progressCard = document.getElementById('aiProgress');
+  const resultEl     = document.getElementById('aiAnalyzeResult');
+  progressCard.classList.remove('hidden');
+  resultEl.classList.add('hidden');
+  aiSetStep('aiStep1', 'active');
+  aiSetStep('aiStep2', '');
+  aiSetStep('aiStep3', '');
+
+  try {
+    const body = { topic: topic || undefined };
+    if (activeTab === 'url') {
+      body.url = url;
+    } else if (activeTab === 'text') {
+      body.text = (title ? title + '\n' : '') + text;
+    } else if (activeTab === 'image') {
+      body.images = images;
+      if (title) body.text = title;
+    }
+
+    aiSetStep('aiStep1', 'done');
+    aiSetStep('aiStep2', 'active');
+
+    const res = await apiFetch('/ai/analyze', { method: 'POST', body: JSON.stringify(body) });
+    const data = res.data;
+
+    aiSetStep('aiStep2', 'done');
+    aiSetStep('aiStep3', 'active');
+    await new Promise(r => setTimeout(r, 300));
+    aiSetStep('aiStep3', 'done');
+
+    _lastAiResult = data;
+    renderAiResult(data);
+    progressCard.classList.add('hidden');
+    resultEl.classList.remove('hidden');
+    toast('AI 分析完成', 'success');
+  } catch (e) {
+    aiSetStep('aiStep1', 'error');
+    aiSetStep('aiStep2', 'error');
+    aiSetStep('aiStep3', 'error');
+    toast('AI 分析失败：' + e.message, 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+}
+
+function renderAiResult(data) {
+  const extracted = data.extracted || {};
+  const inspiration = data.inspiration || '';
+
+  // ── Extracted section ──
+  const extractedCard = document.getElementById('aiExtractedCard');
+  const extractedBody = document.getElementById('aiExtractedBody');
+  const hasExtracted  = extracted.title || extracted.content || (extracted.images || []).length || extracted.meta?.author;
+
+  if (hasExtracted) {
+    extractedCard.classList.remove('hidden');
+    const meta = extracted.meta || {};
+    extractedBody.innerHTML = `
+      ${meta.author ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">作者：<strong style="color:var(--text)">${escHtml(meta.author)}</strong>${meta.likes ? `&nbsp;·&nbsp;👍 ${escHtml(meta.likes)}&nbsp;💬 ${escHtml(meta.comments)}&nbsp;⭐ ${escHtml(meta.collects)}` : ''}</div>` : ''}
+      ${extracted.title ? `<div style="font-size:15px;font-weight:700;margin-bottom:8px">${escHtml(extracted.title)}</div>` : ''}
+      ${extracted.content ? `<div style="font-size:13px;color:var(--text-muted);line-height:1.8;margin-bottom:12px;white-space:pre-wrap">${escHtml(extracted.content.slice(0, 300))}${extracted.content.length > 300 ? '…' : ''}</div>` : ''}
+      ${(extracted.images || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${extracted.images.slice(0, 6).map(u => `<img src="${escHtml(u)}" style="width:60px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--border)" loading="lazy" onerror="this.style.opacity=0.3" />`).join('')}</div>` : ''}
+    `;
+  } else {
+    extractedCard.classList.add('hidden');
+  }
+
+  // ── Inspiration section ──
+  const insBody = document.getElementById('aiInspirationBody');
+  // Render markdown-style ## headings and bullet points
+  const html = inspiration
+    .replace(/^## (.+)$/gm, '<h3 class="ai-ins-heading">$1</h3>')
+    .replace(/^\*\*(.+?)\*\*/gm, '<strong>$1</strong>')
+    .replace(/^(\d+\.|[-•])/gm, '<span class="ai-ins-bullet">$1</span>')
+    .replace(/\n{2,}/g, '</p><p class="ai-ins-para">')
+    .replace(/\n/g, '<br/>');
+  insBody.innerHTML = '<p class="ai-ins-para">' + html + '</p>';
+}
+
+function copyAiInspiration() {
+  if (!_lastAiResult) { toast('暂无内容', 'error'); return; }
+  navigator.clipboard.writeText(_lastAiResult.inspiration || '').then(() => {
+    toast('已复制到剪贴板', 'success');
+  }).catch(() => toast('复制失败，请手动选择', 'error'));
+}
+
+function adoptAiInspiration() {
+  if (!_lastAiResult) { toast('暂无内容', 'error'); return; }
+  const extracted = _lastAiResult.extracted || {};
+  const inspiration = _lastAiResult.inspiration || '';
+
+  // Parse first suggested title from inspiration text
+  const titleMatch = inspiration.match(/[\d一二三四五][\.、]\s*([^\n]{4,20})/);
+  const suggestedTitle = titleMatch ? titleMatch[1].replace(/[\*\[\]（）]/g, '').trim().slice(0, 20) : (extracted.title || '');
+
+  // Parse first suggested body
+  const bodySection = inspiration.match(/##\s*建议配文[\s\S]*?\n([\s\S]*?)(?=\n##|$)/);
+  const suggestedBody = bodySection
+    ? bodySection[1].replace(/^[\d一二三四五][\.、\s]/, '').replace(/\*\*/g, '').trim().slice(0, 500)
+    : (extracted.content || '');
+
+  document.getElementById('pubTitle').value   = suggestedTitle;
+  document.getElementById('pubContent').value = suggestedBody;
+  document.getElementById('pubImages').value  = (extracted.images || []).join('\n');
+
+  // Navigate to publish
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector('.nav-item[data-panel="publish"]')?.classList.add('active');
+  document.getElementById('panel-publish').classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('.tab[data-tab="img"]')?.classList.add('active');
+  document.getElementById('tab-img')?.classList.add('active');
+
+  toast('内容已填入发布页面', 'success');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 /* ============================================================

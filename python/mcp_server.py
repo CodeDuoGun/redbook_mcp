@@ -7,7 +7,8 @@ from schemas import (
     PostCommentArgs, 
     ReplyCommentArgs, 
     LikeFeedArgs,
-    FavoriteFeedArgs
+    FavoriteFeedArgs,
+    CreativeInspirationArgs,
     )
 
 import logging
@@ -212,6 +213,27 @@ def register_tools(server, app_server):
         }
 
         return await app_server.handle_favorite_feed(ctx, args_map)
+
+
+    @server.tool(
+        name="creative_inspiration",
+        description=(
+            "根据用户提供的参考标题、正文、图片、视频等内容，分析其小红书风格特色，"
+            "生成创作思路、建议标题（5条）、建议配文（3条）、图片拍摄建议及视频拍摄建议。"
+        )
+    )
+    @with_panic_recovery("creative_inspiration")
+    async def creative_inspiration(ctx, args: CreativeInspirationArgs):
+
+        args_map = {
+            "title": args.title,
+            "content": args.content,
+            "images": args.images,
+            "video": args.video,
+            "topic": args.topic,
+        }
+
+        return await app_server.handle_creative_inspiration(ctx, args_map)
 
 
 def convert_to_mcp_result(result):

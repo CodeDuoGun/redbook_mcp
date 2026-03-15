@@ -22,9 +22,9 @@
           <span class="nav-icon">◉</span>
           <span>账号登录</span>
         </button>
-        <button class="nav-item" data-panel="analyze">
-          <span class="nav-icon">◈</span>
-          <span>爆款分析</span>
+        <button class="nav-item" data-panel="feeds">
+          <span class="nav-icon">◐</span>
+          <span>首页推荐</span>
         </button>
         <button class="nav-item" data-panel="publish">
           <span class="nav-icon">◆</span>
@@ -34,13 +34,13 @@
           <span class="nav-icon">◎</span>
           <span>搜索内容</span>
         </button>
-        <button class="nav-item" data-panel="image">
-          <span class="nav-icon">◧</span>
-          <span>图片分析</span>
-        </button>
         <button class="nav-item" data-panel="collect">
           <span class="nav-icon">◫</span>
           <span>用户采集</span>
+        </button>
+        <button class="nav-item" data-panel="ai-analyze">
+          <span class="nav-icon">◉</span>
+          <span>AI 智能分析</span>
         </button>
       </nav>
       <div class="sidebar-footer">
@@ -85,31 +85,26 @@
         </div>
       </section>
 
-      <!-- ===== ANALYZE PANEL ===== -->
-      <section class="panel" id="panel-analyze">
+      <!-- ===== FEEDS PANEL ===== -->
+      <section class="panel" id="panel-feeds">
         <div class="panel-header">
-          <h1 class="panel-title">AI 爆款笔记分析</h1>
-          <p class="panel-sub">输入笔记地址，解析内容并生成新的创作方案</p>
+          <h1 class="panel-title">首页推荐</h1>
+          <p class="panel-sub">获取小红书首页推荐笔记列表</p>
         </div>
-
-        <!-- URL input card -->
         <div class="card">
-          <div class="card-label">笔记地址 <span class="hint">支持一个或多个，每行一个</span></div>
-          <textarea class="textarea" id="analyzeUrls" rows="4"
-            placeholder="https://www.xiaohongshu.com/explore/abc123?xsec_token=xxx&#10;https://www.xiaohongshu.com/explore/def456?xsec_token=yyy"></textarea>
-          <div class="btn-row" style="margin-top:12px">
-            <button class="btn btn-primary" onclick="analyzeFromUrls(event)">✦ 开始分析</button>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="feedsLoadBtn" onclick="loadFeedsList()">获取推荐列表</button>
+            <button class="btn btn-ghost hidden" id="feedsRefreshBtn" onclick="loadFeedsList()">↻ 刷新</button>
+          </div>
+          <div id="feedsProgress" class="hidden" style="margin-top:14px">
+            <div class="progress-bar"><div class="progress-fill" id="feedsProgressFill"></div></div>
+            <div class="progress-text" id="feedsProgressText">加载中...</div>
           </div>
         </div>
-
-        <!-- Progress indicator -->
-        <div class="card hidden" id="analyzeProgress">
-          <div class="progress-bar"><div class="progress-fill" id="analyzeFill"></div></div>
-          <div class="progress-text" id="analyzeProgressText">正在解析...</div>
+        <div id="feedsStats" class="hidden" style="margin-bottom:8px">
+          <span style="font-size:12px;color:var(--text-muted)">共获取 <span id="feedsCount" style="color:var(--gold);font-weight:700">0</span> 篇推荐笔记</span>
         </div>
-
-        <!-- Results list -->
-        <div id="analyzeResultsList"></div>
+        <div id="feedsGrid" class="feed-grid hidden"></div>
       </section>
 
       <!-- ===== PUBLISH PANEL ===== -->
@@ -135,8 +130,15 @@
               <textarea class="textarea" id="pubContent" placeholder="分享你的生活..." rows="5"></textarea>
             </div>
             <div class="form-group">
-              <label class="form-label">图片 <span class="hint">每行一个本地路径或URL，最多9张</span></label>
-              <textarea class="textarea" id="pubImages" placeholder="/path/to/image.jpg&#10;https://example.com/img.png" rows="4"></textarea>
+              <label class="form-label">图片 <span class="hint">本地上传或每行一个路径/URL，最多9张</span></label>
+              <div class="upload-zone" id="pubImgUploadZone" onclick="document.getElementById('pubImgFile').click()">
+                <span class="upload-zone-icon">🖼</span>
+                <span>点击选择图片 / 拖拽到此处</span>
+                <span class="upload-zone-hint">支持 JPG、PNG、WEBP，最多9张</span>
+              </div>
+              <input type="file" id="pubImgFile" accept="image/*" multiple style="display:none" onchange="handlePubImgUpload(this)" />
+              <div id="pubImgPreviews" class="upload-previews"></div>
+              <textarea class="textarea" id="pubImages" placeholder="/path/to/image.jpg&#10;https://example.com/img.png" rows="3" style="margin-top:8px"></textarea>
             </div>
             <div class="form-group">
               <label class="form-label">标签 <span class="hint">逗号分隔</span></label>
@@ -182,8 +184,15 @@
               <textarea class="textarea" id="vidContent" placeholder="视频描述..." rows="4"></textarea>
             </div>
             <div class="form-group">
-              <label class="form-label">视频文件路径</label>
-              <input class="input" id="vidPath" placeholder="/path/to/video.mp4" />
+              <label class="form-label">视频文件</label>
+              <div class="upload-zone" id="vidUploadZone" onclick="document.getElementById('vidFile').click()">
+                <span class="upload-zone-icon">🎬</span>
+                <span>点击选择视频 / 拖拽到此处</span>
+                <span class="upload-zone-hint">支持 MP4、MOV、AVI</span>
+              </div>
+              <input type="file" id="vidFile" accept="video/*" style="display:none" onchange="handleVidUpload(this)" />
+              <div id="vidPreview" class="upload-previews"></div>
+              <input class="input" id="vidPath" placeholder="/path/to/video.mp4" style="margin-top:8px" />
             </div>
             <div class="form-group">
               <label class="form-label">标签 <span class="hint">逗号分隔</span></label>
@@ -245,39 +254,6 @@
         <div id="searchResults" class="feed-grid hidden"></div>
       </section>
 
-      <!-- ===== IMAGE ANALYSIS PANEL ===== -->
-      <section class="panel" id="panel-image">
-        <div class="panel-header">
-          <h1 class="panel-title">图片分析</h1>
-          <p class="panel-sub">输入笔记 ID 或图片 URL，获取 AI 视觉分析</p>
-        </div>
-        <div class="card">
-          <div class="form-group">
-            <label class="form-label">图片 URL</label>
-            <div class="form-row">
-              <input class="input" id="imgUrl" placeholder="https://..." />
-              <button class="btn btn-ghost" onclick="previewImage()">预览</button>
-            </div>
-          </div>
-          <div id="imgPreview" class="img-preview hidden"></div>
-          <div class="form-group">
-            <label class="form-label">笔记 ID（可选，自动提取图片）</label>
-            <div class="form-row">
-              <input class="input" id="imgFeedId" placeholder="feedId" />
-              <input class="input" id="imgXsecToken" placeholder="xsec_token" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">分析指令</label>
-            <textarea class="textarea" id="imgPrompt" rows="3" placeholder="请分析这张图片的构图、色调、文字内容，以及为何能成为小红书爆款..."></textarea>
-          </div>
-          <div class="btn-row">
-            <button class="btn btn-primary" onclick="analyzeImage()">✦ 分析图片</button>
-          </div>
-          <div id="imgResult" class="ai-block hidden"></div>
-        </div>
-      </section>
-
       <!-- ===== COLLECT PANEL ===== -->
       <section class="panel" id="panel-collect">
         <div class="panel-header">
@@ -331,6 +307,100 @@
                 </thead>
                 <tbody id="usersTableBody"></tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== AI ANALYZE PANEL ===== -->
+      <section class="panel" id="panel-ai-analyze">
+        <div class="panel-header">
+          <h1 class="panel-title">AI 智能分析</h1>
+          <p class="panel-sub">输入笔记链接、图片或文字，AI 深度解析风格并生成二次创作方案</p>
+        </div>
+
+        <!-- Input card -->
+        <div class="card">
+          <div class="ai-input-tabs" id="aiInputTabs">
+            <button class="ai-input-tab active" data-mode="url">🔗 笔记链接</button>
+            <button class="ai-input-tab" data-mode="text">📝 文字内容</button>
+            <button class="ai-input-tab" data-mode="image">🖼 图片分析</button>
+          </div>
+
+          <!-- URL mode -->
+          <div class="ai-mode-content active" id="aiMode-url">
+            <div class="form-group" style="margin-top:16px">
+              <label class="form-label">小红书笔记链接</label>
+              <input class="input" id="aiUrl" placeholder="https://www.xiaohongshu.com/explore/abc123?xsec_token=xxx" />
+            </div>
+          </div>
+
+          <!-- Text mode -->
+          <div class="ai-mode-content" id="aiMode-text">
+            <div class="form-group" style="margin-top:16px">
+              <label class="form-label">参考标题</label>
+              <input class="input" id="aiTextTitle" placeholder="参考笔记的标题（可选）" maxlength="60" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">参考正文</label>
+              <textarea class="textarea" id="aiTextContent" rows="5" placeholder="粘贴参考笔记的正文内容…"></textarea>
+            </div>
+          </div>
+
+          <!-- Image mode -->
+          <div class="ai-mode-content" id="aiMode-image">
+            <div class="form-group" style="margin-top:16px">
+              <label class="form-label">本地上传图片 <span class="hint">最多4张</span></label>
+              <div class="upload-zone" id="aiImgUploadZone" onclick="document.getElementById('aiImgFile').click()">
+                <span class="upload-zone-icon">🖼</span>
+                <span>点击选择图片 / 拖拽到此处</span>
+                <span class="upload-zone-hint">支持 JPG、PNG、WEBP，最多4张</span>
+              </div>
+              <input type="file" id="aiImgFile" accept="image/*" multiple style="display:none" onchange="handleAiImgUpload(this)" />
+              <div id="aiImgUploadPreviews" class="upload-previews"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">或输入图片链接 <span class="hint">每行一个 URL</span></label>
+              <textarea class="textarea" id="aiImages" rows="3" placeholder="https://example.com/img1.jpg&#10;https://example.com/img2.jpg"></textarea>
+            </div>
+            <div id="aiImgPreviewRow" class="img-preview" style="margin-bottom:0"></div>
+          </div>
+
+          <!-- Common: topic -->
+          <div class="form-group" style="margin-top:4px">
+            <label class="form-label">创作方向 <span class="hint">可选，告诉 AI 你想往哪个方向二次创作</span></label>
+            <input class="input" id="aiTopic" placeholder="例如：转换为秋冬穿搭、宝妈向种草文…" />
+          </div>
+
+          <div class="btn-row">
+            <button class="btn btn-accent" id="aiAnalyzeBtn" onclick="runAiAnalyze()">✦ 开始 AI 分析</button>
+          </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="card hidden" id="aiProgress">
+          <div class="ai-progress-steps" id="aiSteps">
+            <div class="ai-step" id="aiStep1"><span class="ai-step-dot"></span><span>解析笔记内容</span></div>
+            <div class="ai-step" id="aiStep2"><span class="ai-step-dot"></span><span>AI 风格分析</span></div>
+            <div class="ai-step" id="aiStep3"><span class="ai-step-dot"></span><span>生成创作方案</span></div>
+          </div>
+        </div>
+
+        <!-- Result -->
+        <div id="aiAnalyzeResult" class="hidden">
+          <!-- Extracted info -->
+          <div class="card" id="aiExtractedCard">
+            <div class="card-label">◈ 解析到的原始内容</div>
+            <div id="aiExtractedBody"></div>
+          </div>
+
+          <!-- AI inspiration -->
+          <div class="card ai-inspiration-card">
+            <div class="card-label" style="color:var(--gold)">✦ AI 创作建议</div>
+            <div id="aiInspirationBody" class="ai-inspiration-body"></div>
+            <div class="btn-row" style="margin-top:16px">
+              <button class="btn btn-accent" onclick="adoptAiInspiration()">✦ 采纳并去发布</button>
+              <button class="btn btn-ghost" onclick="copyAiInspiration()">复制全文</button>
             </div>
           </div>
         </div>

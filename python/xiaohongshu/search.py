@@ -66,6 +66,7 @@ class SearchAction:
 
         if filters:
             internal = _convert_filter_option(filters)
+            logger.info(f"filters {filters}")
             if internal:
                 # 悬停筛选按钮
                 filter_btn = await self.page.query_selector("div.filter")

@@ -4,7 +4,7 @@ import signal
 import logging
 import traceback
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import JSONResponse
 import uvicorn
 
@@ -456,6 +456,147 @@ class AppServer:
         else:
             result = await self.xiaohongshu_service.like_feed(feed_id, xsec_token)
         return {"content": [{"type": "text", "text": result.message}], "is_error": False}
+
+    async def handle_creative_inspiration(self, ctx, args_map):
+        result = await self.xiaohongshu_service.creative_inspiration(
+            title=args_map.get("title"),
+            content=args_map.get("content"),
+            images=args_map.get("images"),
+            video=args_map.get("video"),
+            topic=args_map.get("topic"),
+        )
+        return {
+            "content": [{"type": "text", "text": result["inspiration"]}],
+            "is_error": False,
+        }
+
+    async def upload_file_handler(self, file: UploadFile = File(...)):
+        """接收前端上传的文件，保存到临时目录，返回绝对路径"""
+        import tempfile, os, shutil
+        try:
+            suffix = os.path.splitext(file.filename or "")[1] or ".bin"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix,
+                                              dir=tempfile.gettempdir())
+            try:
+                contents = await file.read()
+                tmp.write(contents)
+            finally:
+                tmp.close()
+            abs_path = os.path.abspath(tmp.name)
+            return _success({"path": abs_path, "filename": file.filename}, "上传成功")
+        except Exception as e:
+            logger.error(f"文件上传失败: {traceback.format_exc()}")
+            return _error(500, "UPLOAD_FAILED", "文件上传失败", str(e))
+
+    async def creative_inspiration_handler(self, request: Request):
+        try:
+            body = await request.json()
+        except Exception:
+            return _error(400, "INVALID_REQUEST", "请求参数错误", "invalid JSON body")
+        try:
+            result = await self.xiaohongshu_service.creative_inspiration(
+                title=body.get("title"),
+                content=body.get("content"),
+                images=body.get("images"),
+                video=body.get("video"),
+                topic=body.get("topic"),
+            )
+            return _success(result, "创作建议生成成功")
+        except Exception as e:
+            logger.error(f"生成创作建议失败: {traceback.format_exc()}")
+            return _error(500, "CREATIVE_INSPIRATION_FAILED", "生成创作建议失败", str(e))
+
+    async def ai_analyze_handler(self, request: Request):
+        """综合分析入口：接收 url / images / text，先解析笔记内容，再调用 creative_inspiration 生成二次创作建议"""
+        try:
+            body = await request.json()
+        except Exception:
+            return _error(400, "INVALID_REQUEST", "请求参数错误", "invalid JSON body")
+
+        try:
+            note_url: str = body.get("url", "").strip()
+            images: list = body.get("images") or []
+            text: str = body.get("text", "").strip()
+            topic: str = body.get("topic", "").strip()
+
+            # ── Step 1: 如果传了笔记 URL，先抓取笔记详情 ──
+            extracted_title = ""
+            extracted_content = ""
+            extracted_images: list = list(images)  # 用户额外传入的图片
+            extracted_video = ""
+            feed_meta = {}
+
+            if note_url:
+                import re as _re
+                from urllib.parse import urlparse, parse_qs
+                path_match = _re.search(r'/(?:explore|discovery/item)/([a-f0-9]+)', note_url, _re.I)
+                feed_id = path_match.group(1) if path_match else ""
+                xsec_token = ""
+                try:
+                    parsed = urlparse(note_url)
+                    xsec_token = parse_qs(parsed.query).get("xsec_token", [""])[0]
+                except Exception:
+                    pass
+
+                if feed_id:
+                    try:
+                        from xiaohongshu.types import CommentLoadConfig
+                        config = CommentLoadConfig(max_comment_items=0)
+                        detail_wrap = await self.xiaohongshu_service.get_feed_detail(
+                            feed_id, xsec_token, False, config
+                        )
+                        note = detail_wrap.data.note
+                        extracted_title = note.title or ""
+                        extracted_content = note.desc or ""
+                        extracted_images += [
+                            img.urlDefault or img.urlPre
+                            for img in note.imageList
+                            if img.urlDefault or img.urlPre
+                        ]
+                        feed_meta = {
+                            "feed_id": feed_id,
+                            "xsec_token": xsec_token,
+                            "note_type": note.type,
+                            "likes": note.interactInfo.likedCount,
+                            "comments": note.interactInfo.commentCount,
+                            "collects": note.interactInfo.collectedCount,
+                            "author": note.user.nickname,
+                        }
+                    except Exception as e:
+                        logger.warning(f"抓取笔记详情失败（仍继续分析）: {e}")
+
+            # 用户传入的文本作为补充
+            if text and not extracted_content:
+                extracted_content = text
+            elif text:
+                extracted_content = extracted_content + "\n" + text
+
+            # ── Step 2: 调用 creative_inspiration 生成二次创作建议 ──
+            inspiration_result = await self.xiaohongshu_service.creative_inspiration(
+                title=extracted_title or None,
+                content=extracted_content or None,
+                images=extracted_images or None,
+                video=extracted_video or None,
+                topic=topic or None,
+            )
+
+            return _success(
+                {
+                    "extracted": {
+                        "title": extracted_title,
+                        "content": extracted_content,
+                        "images": extracted_images,
+                        "video": extracted_video,
+                        "meta": feed_meta,
+                    },
+                    "inspiration": inspiration_result["inspiration"],
+                    "model": inspiration_result.get("model", ""),
+                },
+                "AI 分析完成",
+            )
+        except Exception as e:
+            logger.error(f"AI 分析失败: {traceback.format_exc()}")
+            return _error(500, "AI_ANALYZE_FAILED", "AI 分析失败", str(e))
 
     async def handle_favorite_feed(self, ctx, args_map):
         feed_id = args_map.get("feed_id", "")
