@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -84,5 +84,14 @@ def setup_routes(app_server):
     # user
     api.post("/user/profile")(app_server.user_profile_handler)
     api.get("/user/me")(app_server.my_profile_handler)
+
+    # creative
+    api.post("/creative/inspiration")(app_server.creative_inspiration_handler)
+
+    # ai analyze
+    api.post("/ai/analyze")(app_server.ai_analyze_handler)
+
+    # file upload
+    api.post("/upload/file")(app_server.upload_file_handler)
 
     app.include_router(api)

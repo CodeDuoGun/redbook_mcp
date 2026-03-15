@@ -76,3 +76,13 @@ class FavoriteFeedArgs:
     feed_id: str
     xsec_token: str
     unfavorite: Optional[bool] = False
+
+
+@dataclass
+class CreativeInspirationArgs:
+    """根据参考内容（标题/正文/图片/视频）分析风格，生成创作建议"""
+    title: Optional[str] = None          # 参考标题
+    content: Optional[str] = None        # 参考正文
+    images: Optional[List[str]] = None   # 参考图片 URL 或本地路径列表
+    video: Optional[str] = None          # 参考视频路径或 URL
+    topic: Optional[str] = None          # 期望创作的主题方向（可选补充说明）

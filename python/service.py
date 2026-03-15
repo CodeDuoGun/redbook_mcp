@@ -417,3 +417,113 @@ class XiaohongshuService:
         finally:
             await session.close()
 
+    async def creative_inspiration(
+        self,
+        title: Optional[str] = None,
+        content: Optional[str] = None,
+        images: Optional[list[str]] = None,
+        video: Optional[str] = None,
+        topic: Optional[str] = None,
+    ) -> dict:
+        """分析参考内容的风格特色，生成创作思路、建议标题、配文、图片及视频拍摄建议"""
+        import base64
+        import mimetypes
+        import httpx
+        import yaml
+
+        # ---------- 读取 API Key ----------
+        api_key = os.getenv("BAILIAN_API_KEY", "")
+        if not api_key:
+            config_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "config.yaml",
+            )
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f) or {}
+                api_key = cfg.get("default", {}).get("BAILIAN_API_KEY", "")
+
+        if not api_key:
+            raise ValueError("未配置 BAILIAN_API_KEY，请在 config.yaml 或环境变量中设置")
+
+        # ---------- 构造多模态消息 ----------
+        user_parts: list[dict] = []
+
+        # 文字参考部分
+        ref_text_lines = ["以下是我找到的参考内容，请分析其小红书风格特色："]
+        if title:
+            ref_text_lines.append(f"【标题】{title}")
+        if content:
+            ref_text_lines.append(f"【正文】{content}")
+        if topic:
+            ref_text_lines.append(f"【我的创作方向】{topic}")
+        user_parts.append({"type": "text", "text": "\n".join(ref_text_lines)})
+
+        # 图片部分（最多 4 张，避免 token 过大）
+        if images:
+            for img_src in images[:4]:
+                try:
+                    if img_src.startswith("http://") or img_src.startswith("https://"):
+                        user_parts.append({"type": "image_url", "image_url": {"url": img_src}})
+                    else:
+                        if os.path.exists(img_src):
+                            mime, _ = mimetypes.guess_type(img_src)
+                            mime = mime or "image/jpeg"
+                            with open(img_src, "rb") as f:
+                                b64 = base64.b64encode(f.read()).decode()
+                            user_parts.append({
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{mime};base64,{b64}"},
+                            })
+                except Exception as e:
+                    logger.warning(f"跳过图片 {img_src}: {e}")
+
+        # 视频说明（只传路径/URL，文字描述；暂不传二进制）
+
+        if video:
+            user_parts.append({"type": "text", "text": f"【参考视频路径/链接】{video}（请根据文件名及上下文推断视频风格）"})
+
+        # ---------- 系统 Prompt ----------
+        system_prompt = (
+            "你是一位资深小红书内容策划专家，擅长分析爆款笔记的风格规律并给出可落地的创作方案。"
+            "请对用户提供的参考内容（标题、正文、图片、视频等）进行深度风格分析，然后输出以下结构化结果：\n"
+            "1. **风格分析**：总结参考内容的视觉风格、语言风格、情绪调性、受众特征。\n"
+            "2. **创作思路**：结合风格分析，给出3条可落地的内容创作方向。\n"
+            "3. **建议标题**（5条）：每条标题不超过20字，符合小红书爆款标题规律，含emoji。\n"
+            "4. **建议配文**（3条）：每条150字以内，自然融入2-3个话题标签，语言活泼接地气。\n"
+            "5. **图片拍摄/制作建议**：构图、光线、色调、道具等具体建议（3-5条）。\n"
+            "6. **视频拍摄建议**（如有视频参考）：时长、节奏、BGM风格、镜头语言等建议（3-5条）。\n"
+            "请用中文回答，格式清晰，每部分用 ## 标题分隔。"
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_parts},
+        ]
+
+        # ---------- 调用百炼 API ----------
+        url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": "qwen-vl-max",
+            "messages": messages,
+            "max_tokens": 2048,
+        }
+
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+
+        result_text = data["choices"][0]["message"]["content"]
+        # 兼容多模态返回（可能是 list）
+        if isinstance(result_text, list):
+            result_text = "\n".join(
+                part.get("text", "") for part in result_text if isinstance(part, dict)
+            )
+
+        return {"inspiration": result_text, "model": data.get("model", "qwen-vl-max")}
+
