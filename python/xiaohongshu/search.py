@@ -28,6 +28,7 @@ def _find_internal_option(group_index: int, text: str) -> tuple[int, int]:
     for tag_idx, opt_text in options:
         if opt_text == text:
             return group_index, tag_idx
+    logger.error(f"在筛选组 {group_index} 中未找到文本 '{text}'")
     raise ValueError(f"在筛选组 {group_index} 中未找到文本 '{text}'")
 
 
