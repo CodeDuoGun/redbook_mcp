@@ -20,6 +20,7 @@ from service import (
 from xiaohongshu.search import FilterOption
 from xiaohongshu.types import CommentLoadConfig, default_comment_load_config
 import dataclasses
+from constants import VisibiltyMap
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +153,7 @@ class AppServer:
                 tags=body.get("tags", []),
                 schedule_at=body.get("schedule_at", ""),
                 is_original=body.get("is_original", False),
-                visibility=body.get("visibility", ""),
+                visibility=VisibiltyMap[body.get("visibility", "")],
                 products=body.get("products", []),
             )
             result = await self.xiaohongshu_service.publish_content(req)
@@ -465,8 +466,21 @@ class AppServer:
             video=args_map.get("video"),
             topic=args_map.get("topic"),
         )
+        import json as _json
+        plans = result.get("plans", [])
+        lines = [f"已生成并自动发布 {len(plans)} 套创作方案（仅自己可见）：\n"]
+        for p in plans:
+            status = "✓ 已发布" if p.get("published") else f"✗ 未发布: {p.get('error', '')}"
+            lines.append(
+                f"方案 {p['index']}\n"
+                f"  标题：{p['title']}\n"
+                f"  文案：{p['content']}\n"
+                f"  配图要点：{p.get('image_prompt', '')}\n"
+                + (f"  视频要点：{p.get('video_prompt', '')}\n" if p.get('video_prompt') else "")
+                + f"  状态：{status}\n"
+            )
         return {
-            "content": [{"type": "text", "text": result["inspiration"]}],
+            "content": [{"type": "text", "text": "\n".join(lines)}],
             "is_error": False,
         }
 
@@ -501,7 +515,7 @@ class AppServer:
                 video=body.get("video"),
                 topic=body.get("topic"),
             )
-            return _success(result, "创作建议生成成功")
+            return _success(result, f"已生成并发布 {len(result.get('plans', []))} 套创作方案")
         except Exception as e:
             logger.error(f"生成创作建议失败: {traceback.format_exc()}")
             return _error(500, "CREATIVE_INSPIRATION_FAILED", "生成创作建议失败", str(e))
@@ -571,7 +585,7 @@ class AppServer:
             elif text:
                 extracted_content = extracted_content + "\n" + text
 
-            # ── Step 2: 调用 creative_inspiration 生成二次创作建议 ──
+            # ── Step 2: 调用 creative_inspiration 直接生成并发布多套方案 ──
             inspiration_result = await self.xiaohongshu_service.creative_inspiration(
                 title=extracted_title or None,
                 content=extracted_content or None,
@@ -580,6 +594,7 @@ class AppServer:
                 topic=topic or None,
             )
 
+            plans = inspiration_result.get("plans", [])
             return _success(
                 {
                     "extracted": {
@@ -589,10 +604,10 @@ class AppServer:
                         "video": extracted_video,
                         "meta": feed_meta,
                     },
-                    "inspiration": inspiration_result["inspiration"],
+                    "plans": plans,
                     "model": inspiration_result.get("model", ""),
                 },
-                "AI 分析完成",
+                f"已生成并发布 {len(plans)} 套创作方案",
             )
         except Exception as e:
             logger.error(f"AI 分析失败: {traceback.format_exc()}")

@@ -316,7 +316,7 @@
       <section class="panel" id="panel-ai-analyze">
         <div class="panel-header">
           <h1 class="panel-title">AI 智能分析</h1>
-          <p class="panel-sub">输入笔记链接、图片或文字，AI 深度解析风格并生成二次创作方案</p>
+          <p class="panel-sub">输入图片或笔记链接，AI 直接生成最多3套创作方案并自动发布（仅自己可见）</p>
         </div>
 
         <!-- Input card -->
@@ -380,9 +380,9 @@
         <!-- Progress -->
         <div class="card hidden" id="aiProgress">
           <div class="ai-progress-steps" id="aiSteps">
-            <div class="ai-step" id="aiStep1"><span class="ai-step-dot"></span><span>解析笔记内容</span></div>
-            <div class="ai-step" id="aiStep2"><span class="ai-step-dot"></span><span>AI 风格分析</span></div>
-            <div class="ai-step" id="aiStep3"><span class="ai-step-dot"></span><span>生成创作方案</span></div>
+            <div class="ai-step" id="aiStep1"><span class="ai-step-dot"></span><span>解析参考内容</span></div>
+            <div class="ai-step" id="aiStep2"><span class="ai-step-dot"></span><span>AI 生成创作方案</span></div>
+            <div class="ai-step" id="aiStep3"><span class="ai-step-dot"></span><span>自动发布（仅自己可见）</span></div>
           </div>
         </div>
 
@@ -396,12 +396,8 @@
 
           <!-- AI inspiration -->
           <div class="card ai-inspiration-card">
-            <div class="card-label" style="color:var(--gold)">✦ AI 创作建议</div>
+            <div class="card-label" style="color:var(--gold)">✦ AI 生成方案（已自动发布，仅自己可见）</div>
             <div id="aiInspirationBody" class="ai-inspiration-body"></div>
-            <div class="btn-row" style="margin-top:16px">
-              <button class="btn btn-accent" onclick="adoptAiInspiration()">✦ 采纳并去发布</button>
-              <button class="btn btn-ghost" onclick="copyAiInspiration()">复制全文</button>
-            </div>
           </div>
         </div>
       </section>
