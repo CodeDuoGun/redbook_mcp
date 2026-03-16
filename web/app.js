@@ -1314,7 +1314,9 @@ async function runAiAnalyze() {
     renderAiResult(data);
     progressCard.classList.add('hidden');
     resultEl.classList.remove('hidden');
-    toast('AI 分析完成', 'success');
+    const planCount = (data.plans || []).length;
+    const published = (data.plans || []).filter(p => p.published).length;
+    toast(`已生成 ${planCount} 套方案，${published} 套已发布（仅自己可见）`, 'success');
   } catch (e) {
     aiSetStep('aiStep1', 'error');
     aiSetStep('aiStep2', 'error');
@@ -1327,9 +1329,9 @@ async function runAiAnalyze() {
 
 function renderAiResult(data) {
   const extracted = data.extracted || {};
-  const inspiration = data.inspiration || '';
+  const plans     = data.plans || [];
 
-  // ── Extracted section ──
+  // ── Extracted source card ──
   const extractedCard = document.getElementById('aiExtractedCard');
   const extractedBody = document.getElementById('aiExtractedBody');
   const hasExtracted  = extracted.title || extracted.content || (extracted.images || []).length || extracted.meta?.author;
@@ -1347,56 +1349,43 @@ function renderAiResult(data) {
     extractedCard.classList.add('hidden');
   }
 
-  // ── Inspiration section ──
+  // ── Plans section ──
   const insBody = document.getElementById('aiInspirationBody');
-  // Render markdown-style ## headings and bullet points
-  const html = inspiration
-    .replace(/^## (.+)$/gm, '<h3 class="ai-ins-heading">$1</h3>')
-    .replace(/^\*\*(.+?)\*\*/gm, '<strong>$1</strong>')
-    .replace(/^(\d+\.|[-•])/gm, '<span class="ai-ins-bullet">$1</span>')
-    .replace(/\n{2,}/g, '</p><p class="ai-ins-para">')
-    .replace(/\n/g, '<br/>');
-  insBody.innerHTML = '<p class="ai-ins-para">' + html + '</p>';
-}
+  if (!plans.length) {
+    insBody.innerHTML = '<p style="color:var(--text-muted)">AI 未返回有效方案，请重试。</p>';
+    return;
+  }
 
-function copyAiInspiration() {
-  if (!_lastAiResult) { toast('暂无内容', 'error'); return; }
-  navigator.clipboard.writeText(_lastAiResult.inspiration || '').then(() => {
-    toast('已复制到剪贴板', 'success');
-  }).catch(() => toast('复制失败，请手动选择', 'error'));
-}
+  insBody.innerHTML = plans.map(p => {
+    const published = p.published;
+    const statusHtml = published
+      ? `<span style="color:var(--green);font-size:12px">✓ 已发布（仅自己可见）${p.post_id ? ' · ID: ' + escHtml(p.post_id) : ''}</span>`
+      : `<span style="color:var(--accent);font-size:12px">✗ 发布失败：${escHtml(p.error || '无可用图片/视频')}</span>`;
 
-function adoptAiInspiration() {
-  if (!_lastAiResult) { toast('暂无内容', 'error'); return; }
-  const extracted = _lastAiResult.extracted || {};
-  const inspiration = _lastAiResult.inspiration || '';
-
-  // Parse first suggested title from inspiration text
-  const titleMatch = inspiration.match(/[\d一二三四五][\.、]\s*([^\n]{4,20})/);
-  const suggestedTitle = titleMatch ? titleMatch[1].replace(/[\*\[\]（）]/g, '').trim().slice(0, 20) : (extracted.title || '');
-
-  // Parse first suggested body
-  const bodySection = inspiration.match(/##\s*建议配文[\s\S]*?\n([\s\S]*?)(?=\n##|$)/);
-  const suggestedBody = bodySection
-    ? bodySection[1].replace(/^[\d一二三四五][\.、\s]/, '').replace(/\*\*/g, '').trim().slice(0, 500)
-    : (extracted.content || '');
-
-  document.getElementById('pubTitle').value   = suggestedTitle;
-  document.getElementById('pubContent').value = suggestedBody;
-  document.getElementById('pubImages').value  = (extracted.images || []).join('\n');
-
-  // Navigate to publish
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelector('.nav-item[data-panel="publish"]')?.classList.add('active');
-  document.getElementById('panel-publish').classList.add('active');
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  document.querySelector('.tab[data-tab="img"]')?.classList.add('active');
-  document.getElementById('tab-img')?.classList.add('active');
-
-  toast('内容已填入发布页面', 'success');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+    return `
+    <div style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;background:var(--surface2)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:11px;color:var(--gold);font-weight:700;text-transform:uppercase;letter-spacing:.06em">✦ 方案 ${p.index}</span>
+        ${statusHtml}
+      </div>
+      <div style="margin-bottom:10px">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">标题</div>
+        <div style="font-size:14px;font-weight:700;line-height:1.5">${escHtml(p.title)}</div>
+      </div>
+      <div style="margin-bottom:10px">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">文案</div>
+        <div style="font-size:13px;color:var(--text-muted);line-height:1.7;white-space:pre-wrap">${escHtml(p.content)}</div>
+      </div>
+      ${p.image_prompt ? `<div style="margin-bottom:${p.video_prompt ? '10px' : '0'}">
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">配图要点</div>
+        <div style="font-size:12px;color:var(--blue)">${escHtml(p.image_prompt)}</div>
+      </div>` : ''}
+      ${p.video_prompt ? `<div>
+        <div style="font-size:10px;color:var(--text-muted);margin-bottom:3px">视频要点</div>
+        <div style="font-size:12px;color:var(--blue)">${escHtml(p.video_prompt)}</div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 /* ============================================================

@@ -425,8 +425,9 @@ class XiaohongshuService:
         video: Optional[str] = None,
         topic: Optional[str] = None,
     ) -> dict:
-        """分析参考内容的风格特色，生成创作思路、建议标题、配文、图片及视频拍摄建议"""
+        """直接生成最多3套可发布的小红书内容方案（标题+文案+配图/视频建议），并自动以仅自己可见发布"""
         import base64
+        import json as _json
         import mimetypes
         import httpx
         import yaml
@@ -449,51 +450,59 @@ class XiaohongshuService:
         # ---------- 构造多模态消息 ----------
         user_parts: list[dict] = []
 
-        # 文字参考部分
-        ref_text_lines = ["以下是我找到的参考内容，请分析其小红书风格特色："]
+        ref_lines: list[str] = []
         if title:
-            ref_text_lines.append(f"【标题】{title}")
+            ref_lines.append(f"【标题】{title}")
         if content:
-            ref_text_lines.append(f"【正文】{content}")
+            ref_lines.append(f"【正文】{content}")
         if topic:
-            ref_text_lines.append(f"【我的创作方向】{topic}")
-        user_parts.append({"type": "text", "text": "\n".join(ref_text_lines)})
+            ref_lines.append(f"【创作方向】{topic}")
+        if video:
+            ref_lines.append(f"【参考视频】{video}")
+        if ref_lines:
+            user_parts.append({"type": "text", "text": "\n".join(ref_lines)})
+        else:
+            user_parts.append({"type": "text", "text": "请根据图片内容结合当前小红书热门话题生成创作方案。"})
 
-        # 图片部分（最多 4 张，避免 token 过大）
+        # 图片（最多4张）
         if images:
             for img_src in images[:4]:
                 try:
                     if img_src.startswith("http://") or img_src.startswith("https://"):
                         user_parts.append({"type": "image_url", "image_url": {"url": img_src}})
-                    else:
-                        if os.path.exists(img_src):
-                            mime, _ = mimetypes.guess_type(img_src)
-                            mime = mime or "image/jpeg"
-                            with open(img_src, "rb") as f:
-                                b64 = base64.b64encode(f.read()).decode()
-                            user_parts.append({
-                                "type": "image_url",
-                                "image_url": {"url": f"data:{mime};base64,{b64}"},
-                            })
+                    elif os.path.exists(img_src):
+                        mime, _ = mimetypes.guess_type(img_src)
+                        mime = mime or "image/jpeg"
+                        with open(img_src, "rb") as f:
+                            b64 = base64.b64encode(f.read()).decode()
+                        user_parts.append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{mime};base64,{b64}"},
+                        })
                 except Exception as e:
                     logger.warning(f"跳过图片 {img_src}: {e}")
 
-        # 视频说明（只传路径/URL，文字描述；暂不传二进制）
+        has_video = bool(video)
 
-        if video:
-            user_parts.append({"type": "text", "text": f"【参考视频路径/链接】{video}（请根据文件名及上下文推断视频风格）"})
-
-        # ---------- 系统 Prompt ----------
+        # ---------- 系统 Prompt：直接输出 JSON 方案，不输出中间分析 ----------
         system_prompt = (
-            "你是一位资深小红书内容策划专家，擅长分析爆款笔记的风格规律并给出可落地的创作方案。"
-            "请对用户提供的参考内容（标题、正文、图片、视频等）进行深度风格分析，然后输出以下结构化结果：\n"
-            "1. **风格分析**：总结参考内容的视觉风格、语言风格、情绪调性、受众特征。\n"
-            "2. **创作思路**：结合风格分析，给出3条可落地的内容创作方向。\n"
-            "3. **建议标题**（5条）：每条标题不超过20字，符合小红书爆款标题规律，含emoji。\n"
-            "4. **建议配文**（3条）：每条150字以内，自然融入2-3个话题标签，语言活泼接地气。\n"
-            "5. **图片拍摄/制作建议**：构图、光线、色调、道具等具体建议（3-5条）。\n"
-            "6. **视频拍摄建议**（如有视频参考）：时长、节奏、BGM风格、镜头语言等建议（3-5条）。\n"
-            "请用中文回答，格式清晰，每部分用 ## 标题分隔。"
+            "你是一位资深小红书内容策划专家。"
+            "根据用户提供的参考内容（标题、正文、图片、视频等），"
+            "直接生成最多3套完整的小红书发布方案，无需输出分析过程。\n"
+            "每套方案包含：\n"
+            "  - title: 标题（不超过20字，含emoji，符合小红书爆款规律）\n"
+            "  - content: 正文文案（150字以内，含2-3个#话题标签，语言活泼接地气）\n"
+            "  - image_prompt: 配图拍摄/制作要点（一句话，具体可执行）\n"
+        )
+        if has_video:
+            system_prompt += (
+                "  - video_prompt: 视频拍摄要点（一句话，含时长/节奏/BGM风格建议）\n"
+            )
+        system_prompt += (
+            "\n请严格以如下 JSON 格式输出，不要有任何其他文字：\n"
+            '[{"title":"...","content":"...","image_prompt":"..."}]'
+            if not has_video else
+            '[{"title":"...","content":"...","image_prompt":"...","video_prompt":"..."}]'
         )
 
         messages = [
@@ -502,7 +511,7 @@ class XiaohongshuService:
         ]
 
         # ---------- 调用百炼 API ----------
-        url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+        api_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
@@ -514,16 +523,85 @@ class XiaohongshuService:
         }
 
         async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(url, json=payload, headers=headers)
+            resp = await client.post(api_url, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
 
-        result_text = data["choices"][0]["message"]["content"]
-        # 兼容多模态返回（可能是 list）
-        if isinstance(result_text, list):
-            result_text = "\n".join(
-                part.get("text", "") for part in result_text if isinstance(part, dict)
-            )
+        raw = data["choices"][0]["message"]["content"]
+        if isinstance(raw, list):
+            raw = "\n".join(part.get("text", "") for part in raw if isinstance(part, dict))
 
-        return {"inspiration": result_text, "model": data.get("model", "qwen-vl-max")}
+        # 尝试解析 JSON 方案列表
+        plans: list[dict] = []
+        try:
+            # 提取第一个 JSON 数组
+            import re as _re
+            m = _re.search(r'\[\s*\{.*?\}\s*(?:,\s*\{.*?\}\s*)*\]', raw, _re.S)
+            if m:
+                plans = _json.loads(m.group())
+        except Exception as e:
+            logger.warning(f"解析 AI 方案 JSON 失败，原始文本: {raw[:200]}... 错误: {e}")
+
+        # 限制最多3套
+        plans = plans[:3]
+
+        # ---------- 自动发布每套方案（仅自己可见）----------
+        publish_results: list[dict] = []
+        ref_images = images or []
+
+        for idx, plan in enumerate(plans):
+            plan_title = str(plan.get("title", ""))[:20]
+            plan_content = str(plan.get("content", ""))
+            plan_image_prompt = str(plan.get("image_prompt", ""))
+            plan_video_prompt = str(plan.get("video_prompt", "")) if has_video else ""
+
+            pub_result: dict = {
+                "index": idx + 1,
+                "title": plan_title,
+                "content": plan_content,
+                "image_prompt": plan_image_prompt,
+                "video_prompt": plan_video_prompt,
+                "published": False,
+                "post_id": "",
+                "error": "",
+            }
+
+            try:
+                if has_video and video:
+                    # 发布视频
+                    video_req = PublishVideoRequest(
+                        title=plan_title,
+                        content=plan_content,
+                        video=video,
+                        tags=[],
+                        visibility="仅自己可见",
+                    )
+                    pub = await self.publish_video(video_req)
+                    pub_result["published"] = True
+                    pub_result["post_id"] = pub.post_id
+                elif ref_images:
+                    # 发布图文
+                    image_req = PublishRequest(
+                        title=plan_title,
+                        content=plan_content,
+                        images=ref_images,
+                        tags=[],
+                        visibility="仅自己可见",
+                    )
+                    pub = await self.publish_content(image_req)
+                    pub_result["published"] = True
+                    pub_result["post_id"] = pub.post_id
+                else:
+                    pub_result["error"] = "无可用图片或视频，跳过发布"
+            except Exception as e:
+                logger.warning(f"方案 {idx+1} 发布失败: {e}")
+                pub_result["error"] = str(e)
+
+            publish_results.append(pub_result)
+
+        return {
+            "plans": publish_results,
+            "model": data.get("model", "qwen-vl-max"),
+            "raw_ai_response": raw,
+        }
 
