@@ -725,13 +725,14 @@ function buildImageAnalysis(url, prompt) {
    COLLECT PANEL
    ============================================================ */
 async function collectUsers() {
-  const feedId  = document.getElementById('collectFeedId').value.trim();
-  const xsec    = document.getElementById('collectXsecToken').value.trim();
+  const noteUrl = document.getElementById('collectNoteUrl').value.trim();
   const limit   = parseInt(document.getElementById('collectLimit').value) || 20;
   const replies = document.getElementById('collectReplies').value === 'true';
 
-  if (!feedId) { toast('请输入笔记ID', 'error'); return; }
-  if (!xsec)   { toast('请输入 xsec_token', 'error'); return; }
+  if (!noteUrl) { toast('请输入笔记链接', 'error'); return; }
+
+  const { feedId, xsecToken: xsec } = parseXhsUrl(noteUrl);
+  if (!feedId) { toast('无法从链接中解析笔记 ID，请检查链接格式', 'error'); return; }
 
   const btn      = event.target;
   const progress = document.getElementById('collectProgress');
@@ -789,25 +790,27 @@ async function collectUsers() {
 
 function extractComments(feedData) {
   if (!feedData) return [];
-  const comments = feedData.comments || feedData.comment_list || [];
+  // comments is { list: [...], cursor, hasMore } — extract the list
+  const commentObj = feedData.comments || feedData.comment_list || {};
+  const comments = Array.isArray(commentObj) ? commentObj : (commentObj.list || []);
   const rows = [];
   for (const c of comments) {
     rows.push({
-      nickname: c.user_info?.nickname || c.nickname || '—',
-      user_id:  c.user_info?.user_id  || c.user_id  || '—',
+      nickname: c.userInfo?.nickname || c.user_info?.nickname || c.nickname || '—',
+      user_id:  c.userInfo?.userId  || c.user_info?.user_id  || c.userId  || c.user_id  || '—',
       content:  c.content || c.note_content || '—',
-      likes:    c.like_count || 0,
-      time:     c.create_time ? new Date(c.create_time * 1000).toLocaleString('zh-CN') : '—',
+      likes:    parseInt(c.likeCount || c.like_count || 0),
+      time:     c.createTime ? new Date(c.createTime).toLocaleString('zh-CN') : (c.create_time ? new Date(c.create_time * 1000).toLocaleString('zh-CN') : '—'),
     });
     // sub-comments / replies
-    const replies = c.sub_comments || c.reply_comments || [];
+    const replies = c.subComments || c.sub_comments || c.reply_comments || [];
     for (const r of replies) {
       rows.push({
-        nickname: r.user_info?.nickname || r.nickname || '—',
-        user_id:  r.user_info?.user_id  || r.user_id  || '—',
+        nickname: r.userInfo?.nickname || r.user_info?.nickname || r.nickname || '—',
+        user_id:  r.userInfo?.userId  || r.user_info?.user_id  || r.userId  || r.user_id  || '—',
         content:  '↳ ' + (r.content || '—'),
-        likes:    r.like_count || 0,
-        time:     r.create_time ? new Date(r.create_time * 1000).toLocaleString('zh-CN') : '—',
+        likes:    parseInt(r.likeCount || r.like_count || 0),
+        time:     r.createTime ? new Date(r.createTime).toLocaleString('zh-CN') : (r.create_time ? new Date(r.create_time * 1000).toLocaleString('zh-CN') : '—'),
       });
     }
   }

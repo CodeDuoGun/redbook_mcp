@@ -402,6 +402,7 @@ class FeedDetailAction:
         with open("result.json", "w") as f:
             f.write(json.dumps(json.loads(result), ensure_ascii=False, indent=2))
         detail = note_detail_map.get(feed_id)
+        logger.info(f"detail: {detail.keys() if isinstance(detail, dict) else type(detail)}")
         if detail is None:
             raise ValueError(f"feed {feed_id} not found in noteDetailMap")
         return FeedDetailResponse(

@@ -20,7 +20,7 @@ from service import (
 from xiaohongshu.search import FilterOption
 from xiaohongshu.types import CommentLoadConfig, default_comment_load_config
 import dataclasses
-from constants import VisibiltyMap
+from constants import VisibiltyMap,FilterMap
 
 logger = logging.getLogger(__name__)
 
@@ -226,9 +226,9 @@ class AppServer:
                 filters_data = body.get("filters")
                 if filters_data:
                     filters = FilterOption(
-                        sort_by=filters_data.get("sort_by", ""),
-                        note_type=filters_data.get("note_type", ""),
-                        publish_time=filters_data.get("publish_time", ""),
+                        sort_by=FilterMap[filters_data.get("sort_by", "comprehensive")],
+                        note_type=FilterMap[filters_data.get("note_type", "total_type")],
+                        publish_time=FilterMap[filters_data.get("publish_time", "unlimited")],
                         search_scope=filters_data.get("search_scope", ""),
                         location=filters_data.get("location", ""),
                     )
@@ -396,12 +396,13 @@ class AppServer:
         if hasattr(args, "filters") and args.filters:
             f = args.filters
             filters = FilterOption(
-                sort_by=getattr(f, "sort_by", ""),
-                note_type=getattr(f, "note_type", ""),
-                publish_time=getattr(f, "publish_time", ""),
+                sort_by=FilterMap[getattr(f, "sort_by", "comprehensive")],
+                note_type=FilterMap[getattr(f, "note_type", "total_type")],
+                publish_time=FilterMap[getattr(f, "publish_time", "unlimited")],
                 search_scope=getattr(f, "search_scope", ""),
                 location=getattr(f, "location", ""),
             )
+            logger.info(getattr(f, "sort_by", "comprehensive"))
         result = await self.xiaohongshu_service.search_feeds(args.keyword, filters)
         import json, dataclasses
         text = json.dumps(
