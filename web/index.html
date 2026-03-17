@@ -233,20 +233,20 @@
           </div>
           <div class="filter-row">
             <select class="input input-sm" id="filterSort">
-              <option value="">默认排序</option>
-              <option value="hot">热度</option>
-              <option value="new">最新</option>
+              <option value="comprehensive">综合</option>
+              <option value="most_likes">最多点赞</option>
+              <option value="most_comments">最多评论</option>
+              <option value="most_favors">最多收藏</option>
             </select>
             <select class="input input-sm" id="filterType">
-              <option value="">全部类型</option>
+              <option value="total_type">全部类型</option>
               <option value="video">视频</option>
               <option value="note">图文</option>
             </select>
             <select class="input input-sm" id="filterTime">
-              <option value="">不限时间</option>
+              <option value="unlimited">不限时间</option>
               <option value="1d">一天内</option>
               <option value="1w">一周内</option>
-              <option value="1m">一月内</option>
               <option value="6m">半年内</option>
             </select>
           </div>
@@ -262,12 +262,8 @@
         </div>
         <div class="card">
           <div class="form-group">
-            <label class="form-label">笔记 ID</label>
-            <input class="input" id="collectFeedId" placeholder="feedId" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">xsec_token</label>
-            <input class="input" id="collectXsecToken" placeholder="xsec_token" />
+            <label class="form-label">笔记链接</label>
+            <input class="input" id="collectNoteUrl" placeholder="https://www.xiaohongshu.com/explore/abc123?xsec_token=xxx" />
           </div>
           <div class="form-row">
             <div class="form-group flex-1">

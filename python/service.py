@@ -574,7 +574,7 @@ class XiaohongshuService:
                         content=plan_content,
                         video=video,
                         tags=[],
-                        visibility="仅自己可见",
+                        visibility="仅互关好友可见",
                     )
                     pub = await self.publish_video(video_req)
                     pub_result["published"] = True
@@ -586,7 +586,7 @@ class XiaohongshuService:
                         content=plan_content,
                         images=ref_images,
                         tags=[],
-                        visibility="仅自己可见",
+                        visibility="仅互关好友可见",
                     )
                     pub = await self.publish_content(image_req)
                     pub_result["published"] = True

@@ -65,8 +65,8 @@ class SearchAction:
         await self.page.wait_for_function("() => window.__INITIAL_STATE__ !== undefined")
 
         if filters:
-            internal = _convert_filter_option(filters)
             logger.info(f"filters {filters}")
+            internal = _convert_filter_option(filters)
             if internal:
                 # 悬停筛选按钮
                 filter_btn = await self.page.query_selector("div.filter")
