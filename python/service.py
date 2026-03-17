@@ -30,6 +30,9 @@ from xiaohongshu.types import (
     default_comment_load_config,
 )
 from xiaohongshu.user_profile import UserProfileAction
+from config import config
+import json
+from model.img_processor import ImageModel
 
 
 # ==================== Request / Response 数据类 ====================
@@ -425,183 +428,64 @@ class XiaohongshuService:
         video: Optional[str] = None,
         topic: Optional[str] = None,
     ) -> dict:
-        """直接生成最多3套可发布的小红书内容方案（标题+文案+配图/视频建议），并自动以仅自己可见发布"""
-        import base64
-        import json as _json
-        import mimetypes
-        import httpx
-        import yaml
+        """使用 CreativeAgent：分析媒体风格 -> 生成3套方案 -> AI生成图片/视频 -> 仅自己可见发布"""
+        from agent.creative_agent import CreativeAgent
 
-        # ---------- 读取 API Key ----------
-        api_key = os.getenv("BAILIAN_API_KEY", "")
-        if not api_key:
-            config_path = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                "config.yaml",
+        agent = CreativeAgent()
+
+        async def _publish_image(plan_title: str, plan_content: str, image_paths: list[str]) -> str:
+            req = PublishRequest(
+                title=plan_title[:20],
+                content=plan_content,
+                images=image_paths,
+                tags=[],
+                visibility="仅自己可见",
             )
-            if os.path.exists(config_path):
-                with open(config_path, "r", encoding="utf-8") as f:
-                    cfg = yaml.safe_load(f) or {}
-                api_key = cfg.get("default", {}).get("BAILIAN_API_KEY", "")
+            pub = await self.publish_content(req)
+            return pub.post_id
 
-        if not api_key:
-            raise ValueError("未配置 BAILIAN_API_KEY，请在 config.yaml 或环境变量中设置")
-
-        # ---------- 构造多模态消息 ----------
-        user_parts: list[dict] = []
-
-        ref_lines: list[str] = []
-        if title:
-            ref_lines.append(f"【标题】{title}")
-        if content:
-            ref_lines.append(f"【正文】{content}")
-        if topic:
-            ref_lines.append(f"【创作方向】{topic}")
-        if video:
-            ref_lines.append(f"【参考视频】{video}")
-        if ref_lines:
-            user_parts.append({"type": "text", "text": "\n".join(ref_lines)})
-        else:
-            user_parts.append({"type": "text", "text": "请根据图片内容结合当前小红书热门话题生成创作方案。"})
-
-        # 图片（最多4张）
-        if images:
-            for img_src in images[:4]:
-                try:
-                    if img_src.startswith("http://") or img_src.startswith("https://"):
-                        user_parts.append({"type": "image_url", "image_url": {"url": img_src}})
-                    elif os.path.exists(img_src):
-                        mime, _ = mimetypes.guess_type(img_src)
-                        mime = mime or "image/jpeg"
-                        with open(img_src, "rb") as f:
-                            b64 = base64.b64encode(f.read()).decode()
-                        user_parts.append({
-                            "type": "image_url",
-                            "image_url": {"url": f"data:{mime};base64,{b64}"},
-                        })
-                except Exception as e:
-                    logger.warning(f"跳过图片 {img_src}: {e}")
-
-        has_video = bool(video)
-
-        # ---------- 系统 Prompt：直接输出 JSON 方案，不输出中间分析 ----------
-        system_prompt = (
-            "你是一位资深小红书内容策划专家。"
-            "根据用户提供的参考内容（标题、正文、图片、视频等），"
-            "直接生成最多3套完整的小红书发布方案，无需输出分析过程。\n"
-            "每套方案包含：\n"
-            "  - title: 标题（不超过20字，含emoji，符合小红书爆款规律）\n"
-            "  - content: 正文文案（150字以内，含2-3个#话题标签，语言活泼接地气）\n"
-            "  - image_prompt: 配图拍摄/制作要点（一句话，具体可执行）\n"
-        )
-        if has_video:
-            system_prompt += (
-                "  - video_prompt: 视频拍摄要点（一句话，含时长/节奏/BGM风格建议）\n"
+        async def _publish_video(plan_title: str, plan_content: str, video_path: str) -> str:
+            req = PublishVideoRequest(
+                title=plan_title[:20],
+                content=plan_content,
+                video=video_path,
+                tags=[],
+                visibility="仅自己可见",
             )
-        system_prompt += (
-            "\n请严格以如下 JSON 格式输出，不要有任何其他文字：\n"
-            '[{"title":"...","content":"...","image_prompt":"..."}]'
-            if not has_video else
-            '[{"title":"...","content":"...","image_prompt":"...","video_prompt":"..."}]'
+            pub = await self.publish_video(req)
+            return pub.post_id
+
+        result = await agent.run(
+            title=title,
+            content=content,
+            images=images,
+            video=video,
+            topic=topic,
+            publish_fn_image=_publish_image,
+            publish_fn_video=_publish_video,
         )
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_parts},
-        ]
-
-        # ---------- 调用百炼 API ----------
-        api_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": "qwen-vl-max",
-            "messages": messages,
-            "max_tokens": 2048,
-        }
-
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(api_url, json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-
-        raw = data["choices"][0]["message"]["content"]
-        if isinstance(raw, list):
-            raw = "\n".join(part.get("text", "") for part in raw if isinstance(part, dict))
-
-        # 尝试解析 JSON 方案列表
-        plans: list[dict] = []
-        try:
-            # 提取第一个 JSON 数组
-            import re as _re
-            m = _re.search(r'\[\s*\{.*?\}\s*(?:,\s*\{.*?\}\s*)*\]', raw, _re.S)
-            if m:
-                plans = _json.loads(m.group())
-        except Exception as e:
-            logger.warning(f"解析 AI 方案 JSON 失败，原始文本: {raw[:200]}... 错误: {e}")
-
-        # 限制最多3套
-        plans = plans[:3]
-
-        # ---------- 自动发布每套方案（仅自己可见）----------
-        publish_results: list[dict] = []
-        ref_images = images or []
-
-        for idx, plan in enumerate(plans):
-            plan_title = str(plan.get("title", ""))[:20]
-            plan_content = str(plan.get("content", ""))
-            plan_image_prompt = str(plan.get("image_prompt", ""))
-            plan_video_prompt = str(plan.get("video_prompt", "")) if has_video else ""
-
-            pub_result: dict = {
-                "index": idx + 1,
-                "title": plan_title,
-                "content": plan_content,
-                "image_prompt": plan_image_prompt,
-                "video_prompt": plan_video_prompt,
-                "published": False,
-                "post_id": "",
-                "error": "",
-            }
-
-            try:
-                if has_video and video:
-                    # 发布视频
-                    video_req = PublishVideoRequest(
-                        title=plan_title,
-                        content=plan_content,
-                        video=video,
-                        tags=[],
-                        visibility="仅互关好友可见",
-                    )
-                    pub = await self.publish_video(video_req)
-                    pub_result["published"] = True
-                    pub_result["post_id"] = pub.post_id
-                elif ref_images:
-                    # 发布图文
-                    image_req = PublishRequest(
-                        title=plan_title,
-                        content=plan_content,
-                        images=ref_images,
-                        tags=[],
-                        visibility="仅互关好友可见",
-                    )
-                    pub = await self.publish_content(image_req)
-                    pub_result["published"] = True
-                    pub_result["post_id"] = pub.post_id
-                else:
-                    pub_result["error"] = "无可用图片或视频，跳过发布"
-            except Exception as e:
-                logger.warning(f"方案 {idx+1} 发布失败: {e}")
-                pub_result["error"] = str(e)
-
-            publish_results.append(pub_result)
 
         return {
-            "plans": publish_results,
-            "model": data.get("model", "qwen-vl-max"),
-            "raw_ai_response": raw,
+            "plans": [
+                {
+                    "index": p.index,
+                    "title": p.title,
+                    "content": p.content,
+                    "image_prompt": p.image_prompt,
+                    "video_prompt": p.video_prompt,
+                    "generated_images": p.generated_images,
+                    "generated_video": p.generated_video,
+                    "published": p.published,
+                    "post_id": p.post_id,
+                    "error": p.error,
+                }
+                for p in result.plans
+            ],
+            "mode": result.mode,
+            "style_analysis": result.style_analysis,
+            "model": result.model,
+            "raw_ai_response": result.raw_ai_response,
         }
+
+
 
