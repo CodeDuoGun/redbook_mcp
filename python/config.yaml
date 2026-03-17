@@ -1,0 +1,4 @@
+default:
+  DASHSCOPE_API_KEY: sk-bf42c1d653314440a9cb776fd4d2b043
+  BASE_SDK_API_URL: https://dashscope.aliyuncs.com/api/v1
+  BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions

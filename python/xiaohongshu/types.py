@@ -97,6 +97,20 @@ class CommentList(BaseModel):
     cursor: str = ""
     hasMore: bool = False
 
+class VideoMediaInfo(BaseModel):
+    video: dict
+    stream: dict
+    videoId: int
+
+class VideoImageInfo(BaseModel):
+    firstFrameFileid: str
+    thumbnailFileid: str
+
+class VideoInfo(BaseModel):
+    capa: dict
+    media: VideoMediaInfo
+    image: VideoImageInfo
+
 
 class FeedDetail(BaseModel):
     noteId: str = ""
@@ -106,6 +120,7 @@ class FeedDetail(BaseModel):
     type: str = ""
     time: int = 0
     ipLocation: str = ""
+    video: VideoInfo = Field(default_factory=VideoInfo) 
     user: User = Field(default_factory=User)
     interactInfo: InteractInfo = Field(default_factory=InteractInfo)
     imageList: list[DetailImageInfo] = Field(default_factory=list)

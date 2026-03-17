@@ -1,73 +1,46 @@
 import os
 import dashscope
 from dashscope.aigc.image_generation import ImageGeneration
-from dashscope.api_entities.dashscope_response import Role, Message
-from http import HTTPStatus
-
+from dashscope.api_entities.dashscope_response import Message
+from utils import download_img
 # 以下为北京地域url，各地域的base_url不同
 dashscope.base_http_api_url = 'https://dashscope.aliyuncs.com/api/v1'
 
 # 若没有配置环境变量，请用百炼API Key将下行替换为：api_key="sk-xxx"
-# 新加坡和北京地域的API Key不同。获取API Key：https://help.aliyun.com/zh/model-studio/get-api-key
-api_key = os.getenv("DASHSCOPE_API_KEY")
+# 各地域的API Key不同。获取API Key：https://help.aliyun.com/zh/model-studio/get-api-key
+def gen_img():
+    api_key = os.getenv("DASHSCOPE_API_KEY")
 
-# 创建异步任务
-def create_async_task():
-    print("Creating async task...")
     message = Message(
         role="user",
-        content=[{'text': '一间有着精致窗户的花店，漂亮的木质门，摆放着花朵'}]
+        content=[
+            {
+                'text': '一间有着精致窗户的花店，漂亮的木质门，摆放着花朵. 同时返回如下结构的构图理念：主体（主体描述）+ 场景（场景描述）+ 风格（定义风格）+ 镜头语言 + 氛围词 + 细节修饰'
+            }
+        ]
     )
-    response = ImageGeneration.async_call(
+    print("----sync call, please wait a moment----")
+    rsp = ImageGeneration.call(
         model="wan2.6-t2i",
         api_key=api_key,
         messages=[message],
-        negative_prompt="",
+        negative_prompt="低分辨率，低画质，肢体畸形，手指畸形，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有AI感。构图混乱。文字模糊，扭曲。",
         prompt_extend=True,
         watermark=False,
         n=1,
         size="1280*1280"
     )
-    
-    if response.status_code == 200:
-        print("Task created successfully:", response)
-        return response
-    else:
-        raise Exception(f"Failed to create task: {response.code} - {response.message}")
+    print(rsp)
 
-# 等待任务完成
-def wait_for_completion(task_response):
-    print("Waiting for task completion...")
-    status = ImageGeneration.wait(task=task_response, api_key=api_key)
-    
-    if status.output.task_status == "SUCCEEDED":
-        print("Task succeeded!")
-        print("Response:", status)
-    else:
-        raise Exception(f"Task failed with status: {status.output.task_status}")
+    choices = rsp.get("output", {}).get("choices", [])
+    if choices:
+        for msg in choices:
+            imgs = msg["message"]["content"]
+            
+    import datetime
+    now = datetime.datetime.now().strftime("%Y%m%d")
+    urls = [url["image"] for url in imgs]
+    download_img(list(urls), output_dir=f"output/{now}")
 
-# 获取异步任务信息
-def fetch_task_status(task):
-    print("Fetching task status...")
-    status = ImageGeneration.fetch(task=task, api_key=api_key)
-    
-    if status.status_code == HTTPStatus.OK:
-        print("Task status:", status.output.task_status)
-        print("Response details:", status)
-    else:
-        print(f"Failed to fetch status: {status.code} - {status.message}")
-
-# 取消异步任务
-def cancel_task(task):
-    print("Canceling task...")
-    response = ImageGeneration.cancel(task=task, api_key=api_key)
-    
-    if response.status_code == HTTPStatus.OK:
-        print("Task canceled successfully:", response.output.task_status)
-    else:
-        print(f"Failed to cancel task: {response.code} - {response.message}")
-
-# 主执行流程
 if __name__ == "__main__":
-    task = create_async_task()
-    wait_for_completion(task)
+    gen_img()

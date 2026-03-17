@@ -2,25 +2,14 @@ import json
 import os
 import dashscope
 from dashscope import MultiModalConversation
-import requests
+from loguru import logger
 dashscope.base_http_api_url = 'https://dashscope.aliyuncs.com/api/v1'
+from utils import download_img
 
 
-def dump_img(imgs:list, output_dir):
-    """遍历地址落盘文件"""    
-    os.makedirs(output_dir,exist_ok=True)
-    for url in imgs:
-        file_name = url.split("/")[-1] 
-        out_path = os.path.join(output_dir, file_name)
-        with requests.get(url, stream=True) as r:
-            r.raise_for_status()
-            with open(out_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
 
 
-def qwen_gen_img(messages):
+def qwen_gen_img(messages=None):
     messages = [
         {
             "role": "user",
@@ -43,13 +32,26 @@ def qwen_gen_img(messages):
         watermark=False,
         prompt_extend=True,
         negative_prompt="低分辨率，低画质，肢体畸形，手指畸形，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有AI感。构图混乱。文字模糊，扭曲。",
-        size='2048*2048'
+        size='2048*2048',
+        n=2
     )
 
     if response.status_code == 200:
         print(json.dumps(response, ensure_ascii=False))
+        choices = response.get("output", {}).get("choices", [])
+        if choices:
+            for msg in choices:
+                imgs = msg["message"]["content"]
+                
+        import datetime
+        now = datetime.datetime.now().strftime("%Y%m%d")
+        urls = [url["image"] for url in imgs]
+        download_img(list(urls), output_dir=f"output/{now}")
     else:
         print(f"HTTP返回码：{response.status_code}")
         print(f"错误码：{response.code}")
         print(f"错误信息：{response.message}")
         print("请参考文档：https://help.aliyun.com/zh/model-studio/developer-reference/error-code")
+
+if __name__ == "__main__":
+    qwen_gen_img()

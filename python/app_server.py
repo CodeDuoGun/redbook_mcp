@@ -21,6 +21,7 @@ from xiaohongshu.search import FilterOption
 from xiaohongshu.types import CommentLoadConfig, default_comment_load_config
 import dataclasses
 from constants import VisibiltyMap,FilterMap
+from utils import get_best_video_url
 
 logger = logging.getLogger(__name__)
 
@@ -467,17 +468,28 @@ class AppServer:
             video=args_map.get("video"),
             topic=args_map.get("topic"),
         )
-        import json as _json
         plans = result.get("plans", [])
-        lines = [f"已生成并自动发布 {len(plans)} 套创作方案（仅自己可见）：\n"]
+        mode = result.get("mode", "image")
+        style = result.get("style_analysis", "")
+        lines = [
+            f"模式：{'视频' if mode == 'video' else '图文'}",
+            f"风格分析：{style[:120]}..." if len(style) > 120 else f"风格分析：{style}",
+            f"\n已生成并自动发布 {len(plans)} 套创作方案（仅自己可见）：\n",
+        ]
         for p in plans:
             status = "✓ 已发布" if p.get("published") else f"✗ 未发布: {p.get('error', '')}"
+            media_line = ""
+            if p.get("generated_images"):
+                media_line = f"  AI生成图片：{', '.join(p['generated_images'])}\n"
+            elif p.get("generated_video"):
+                media_line = f"  AI生成视频：{p['generated_video']}\n"
             lines.append(
                 f"方案 {p['index']}\n"
                 f"  标题：{p['title']}\n"
                 f"  文案：{p['content']}\n"
-                f"  配图要点：{p.get('image_prompt', '')}\n"
+                + (f"  配图要点：{p.get('image_prompt', '')}\n" if p.get('image_prompt') else "")
                 + (f"  视频要点：{p.get('video_prompt', '')}\n" if p.get('video_prompt') else "")
+                + media_line
                 + f"  状态：{status}\n"
             )
         return {
@@ -568,6 +580,7 @@ class AppServer:
                             for img in note.imageList
                             if img.urlDefault or img.urlPre
                         ]
+                        extracted_video = get_best_video_url(note)
                         feed_meta = {
                             "feed_id": feed_id,
                             "xsec_token": xsec_token,

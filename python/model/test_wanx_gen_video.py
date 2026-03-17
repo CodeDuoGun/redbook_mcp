@@ -2,6 +2,7 @@ from http import HTTPStatus
 from dashscope import VideoSynthesis
 import dashscope
 import os
+from utils import download_video
 
 # 以下为北京地域URL，各地域的URL不同，获取URL：https://help.aliyun.com/zh/model-studio/text-to-video-api-reference
 dashscope.base_http_api_url = 'https://dashscope.aliyuncs.com/api/v1'
@@ -43,9 +44,11 @@ def sample_async_call_t2v():
     print(rsp)
     if rsp.status_code == HTTPStatus.OK:
         print(rsp.output.video_url)
+        # download_video(rsp.output.video_url, "./")
     else:
         print('Failed, status_code: %s, code: %s, message: %s' %
               (rsp.status_code, rsp.code, rsp.message))
+        
 
 
 if __name__ == '__main__':
